@@ -31,17 +31,31 @@ async def ingest_pdf_pages(
     document: Document,
     pdf_path: Path,
     limits: ExtractionLimits | None = None,
+    isolated: bool = False,
 ) -> int:
     """Extract a PDF and replace the document's indexed pages.
 
     Raises `ExtractionError` (document pages untouched) on any extraction
     failure. Returns the number of pages indexed. The caller owns the
     transaction and must commit.
+
+    `isolated=True` runs extraction in a killable worker process with a hard
+    wall-clock timeout and resource limits — REQUIRED for untrusted or
+    provider-supplied files (ADR 0010/0011). The in-process path remains for
+    trusted local fixtures and the seed.
     """
-    # Fully materialise before touching existing pages — see module docstring.
+    if isolated:
+        from app.documents.worker import extract_pages_isolated
+
+        extracted_pages = await extract_pages_isolated(pdf_path, limits)
+    else:
+        # Fully materialise before touching existing pages — see module
+        # docstring.
+        extracted_pages = list(extract_page_texts(pdf_path, limits))
+
     pages = [
         PageInput(text=extracted.text, truncated=extracted.truncated)
-        for extracted in extract_page_texts(pdf_path, limits)
+        for extracted in extracted_pages
     ]
 
     count = await DocumentRepository(session).replace_pages(
