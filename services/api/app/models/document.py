@@ -2,12 +2,34 @@
 
 import uuid
 from datetime import date
+from enum import StrEnum
 
 from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.provider import Provider
+
+
+class DocumentOrigin(StrEnum):
+    """How a document record entered the system. Sample/mock content must
+    never be presentable as official provider data."""
+
+    SEEDED_SAMPLE = "seeded_sample"
+    LIVE = "live"
+    UPLOADED = "uploaded"
+    CACHED = "cached"
+
+
+class PageTextSource(StrEnum):
+    """Where a page's text came from — matters for trust, citations,
+    debugging, and future AI retrieval."""
+
+    NATIVE_PDF = "native_pdf"
+    OCR = "ocr"
+    PROVIDER_SUPPLIED = "provider_supplied"
+    MANUAL_ENTRY = "manual_entry"
+    SEEDED_SAMPLE = "seeded_sample"
 
 
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -22,6 +44,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     revision: Mapped[str | None] = mapped_column(String(50))
     published_at: Mapped[date | None] = mapped_column(Date)
     language: Mapped[str | None] = mapped_column(String(20))
+    origin: Mapped[str] = mapped_column(String(20), default=DocumentOrigin.LIVE.value)
 
     provider: Mapped[Provider] = relationship()
     model_links: Mapped[list["ModelDocument"]] = relationship(back_populates="document")
@@ -41,6 +64,7 @@ class DocumentPage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), index=True)
     page_number: Mapped[int] = mapped_column(Integer)
     text_content: Mapped[str] = mapped_column(Text)
+    text_source: Mapped[str] = mapped_column(String(30))
 
     document: Mapped[Document] = relationship(back_populates="pages")
 

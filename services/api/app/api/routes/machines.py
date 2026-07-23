@@ -45,6 +45,7 @@ def _document_item(document: Document) -> DocumentItem:
         revision=document.revision,
         published_at=document.published_at,
         language=document.language,
+        origin=document.origin,
     )
 
 

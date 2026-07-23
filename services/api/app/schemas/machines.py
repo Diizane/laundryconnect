@@ -24,6 +24,7 @@ class DocumentItem(BaseModel):
     revision: str | None
     published_at: date | None
     language: str | None
+    origin: str
 
 
 class DocumentCategory(BaseModel):

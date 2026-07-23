@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.database.session import create_engine, create_session_factory
+from app.models import DocumentOrigin, PageTextSource
 from app.repositories.documents import DocumentRepository
 from app.repositories.machines import MachineRepository
 from app.repositories.providers import ProviderRepository
@@ -169,12 +170,17 @@ async def seed(session: AsyncSession) -> dict[str, int]:
                     revision=doc.revision,
                     published_at=doc.published_at,
                     language=doc.language,
+                    origin=DocumentOrigin.SEEDED_SAMPLE.value,
                 )
                 created["documents"] += 1
             await documents.associate_with_model(document, model)
 
             if doc.pages and await documents.page_count(document.id) == 0:
-                created["pages"] += await documents.replace_pages(document, list(doc.pages))
+                created["pages"] += await documents.replace_pages(
+                    document,
+                    list(doc.pages),
+                    text_source=PageTextSource.SEEDED_SAMPLE.value,
+                )
 
     return created
 
