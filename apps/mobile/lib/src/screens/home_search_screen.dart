@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
+import '../models/machine.dart';
 import '../models/search.dart';
+import '../storage/workspace_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/result_card.dart';
+import 'machine_workspace_screen.dart';
 
 /// Home screen: universal search bar first, results below on the same
 /// screen — a technician standing at a machine gets from launch to answer
 /// with one tap and one query.
 class HomeSearchScreen extends StatefulWidget {
-  const HomeSearchScreen({super.key, required this.searchApi});
+  const HomeSearchScreen({
+    super.key,
+    required this.searchApi,
+    required this.machinesApi,
+    required this.store,
+  });
 
   final SearchApi searchApi;
+  final MachinesApi machinesApi;
+  final WorkspaceStore store;
 
   @override
   State<HomeSearchScreen> createState() => _HomeSearchScreenState();
@@ -68,6 +78,41 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
     }
   }
 
+  /// Open the machine workspace for a search result's model, if the
+  /// catalog knows it.
+  Future<void> _openWorkspaceForResult(SearchResult result) async {
+    final model = result.model;
+    if (model == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final machines = await widget.machinesApi.findByModelNumber(model);
+      if (!mounted) return;
+      if (machines.isEmpty) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('No workspace available for $model yet.')),
+        );
+        return;
+      }
+      await _openWorkspace(machines.first);
+    } on ApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  Future<void> _openWorkspace(MachineSummary machine) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MachineWorkspaceScreen(
+          machine: machine,
+          machinesApi: widget.machinesApi,
+          store: widget.store,
+        ),
+      ),
+    );
+    // Refresh recents/bookmarks shown in the idle state.
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -102,11 +147,93 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
 
   Widget _buildBody() {
     return switch (_state) {
-      _Idle() => const _EmptyHint(),
+      _Idle() => _IdleView(store: widget.store, onOpenMachine: _openWorkspace),
       _Loading() => const Center(child: CircularProgressIndicator()),
       _Failed(:final message) => _ErrorView(message: message, onRetry: _search),
-      _Loaded(:final response) => _ResultsView(response: response),
+      _Loaded(:final response) => _ResultsView(
+        response: response,
+        onResultTap: _openWorkspaceForResult,
+      ),
     };
+  }
+}
+
+/// Idle state: hint plus locally stored bookmarks and recent machines so a
+/// returning technician can skip the search entirely.
+class _IdleView extends StatelessWidget {
+  const _IdleView({required this.store, required this.onOpenMachine});
+
+  final WorkspaceStore store;
+  final void Function(MachineSummary) onOpenMachine;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<List<MachineSummary>>>(
+      future: Future.wait([store.bookmarkedMachines(), store.recentMachines()]),
+      builder: (context, snapshot) {
+        final bookmarks = snapshot.data?[0] ?? const <MachineSummary>[];
+        final recents = snapshot.data?[1] ?? const <MachineSummary>[];
+        if (bookmarks.isEmpty && recents.isEmpty) {
+          return const _EmptyHint();
+        }
+        return ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            if (bookmarks.isNotEmpty) ...[
+              _SectionLabel('Bookmarked machines'),
+              _MachineChips(machines: bookmarks, onTap: onOpenMachine),
+            ],
+            if (recents.isNotEmpty) ...[
+              _SectionLabel('Recent machines'),
+              _MachineChips(machines: recents, onTap: onOpenMachine),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: AppColors.navy,
+        ),
+      ),
+    );
+  }
+}
+
+class _MachineChips extends StatelessWidget {
+  const _MachineChips({required this.machines, required this.onTap});
+
+  final List<MachineSummary> machines;
+  final void Function(MachineSummary) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final machine in machines)
+          ActionChip(
+            avatar: const Icon(Icons.local_laundry_service_outlined, size: 18),
+            label: Text('${machine.modelNumber} · ${machine.brand}'),
+            onPressed: () => onTap(machine),
+          ),
+      ],
+    );
   }
 }
 
@@ -175,9 +302,10 @@ class _ErrorView extends StatelessWidget {
 }
 
 class _ResultsView extends StatelessWidget {
-  const _ResultsView({required this.response});
+  const _ResultsView({required this.response, required this.onResultTap});
 
   final SearchResponse response;
+  final void Function(SearchResult) onResultTap;
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +328,10 @@ class _ResultsView extends StatelessWidget {
           for (final result in group.results)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: ResultCard(result: result),
+              child: ResultCard(
+                result: result,
+                onTap: () => onResultTap(result),
+              ),
             ),
         ],
       ],

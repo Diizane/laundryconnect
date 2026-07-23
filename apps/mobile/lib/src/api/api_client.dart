@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../models/machine.dart';
 import '../models/search.dart';
 
 /// Base URL for the LaundryConnect backend.
@@ -32,8 +33,16 @@ abstract interface class SearchApi {
   Future<SearchResponse> search(String query);
 }
 
-class HttpSearchApi implements SearchApi {
-  HttpSearchApi({http.Client? client, this.baseUrl = apiBaseUrl})
+abstract interface class MachinesApi {
+  Future<List<MachineSummary>> findByModelNumber(String modelNumber);
+
+  Future<MachineDocuments> machineDocuments(String machineId);
+}
+
+/// Shared request plumbing: timeouts, connectivity errors, status handling,
+/// and JSON decoding with technician-friendly messages.
+class _BackendClient {
+  _BackendClient({http.Client? client, required this.baseUrl})
     : _client = client ?? http.Client();
 
   final http.Client _client;
@@ -41,20 +50,27 @@ class HttpSearchApi implements SearchApi {
 
   static const _timeout = Duration(seconds: 15);
 
-  @override
-  Future<SearchResponse> search(String query) async {
+  Future<dynamic> requestJson(
+    String method,
+    String path, {
+    Map<String, String>? queryParameters,
+    Object? body,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl$path',
+    ).replace(queryParameters: queryParameters);
     final http.Response response;
     try {
-      response = await _client
-          .post(
-            Uri.parse('$baseUrl/api/v1/search'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'query': query}),
-          )
-          .timeout(_timeout);
+      final request = http.Request(method, uri);
+      if (body != null) {
+        request.headers['Content-Type'] = 'application/json';
+        request.body = jsonEncode(body);
+      }
+      final streamed = await _client.send(request).timeout(_timeout);
+      response = await http.Response.fromStream(streamed);
     } on TimeoutException {
       throw const ApiException(
-        'Search timed out. Check your connection and try again.',
+        'Request timed out. Check your connection and try again.',
       );
     } on SocketException {
       throw const ApiException(
@@ -66,22 +82,84 @@ class HttpSearchApi implements SearchApi {
       );
     }
 
-    if (response.statusCode == 422) {
-      throw const ApiException(
-        'That search is not valid. Try a model, part, or fault code.',
-      );
+    switch (response.statusCode) {
+      case 200:
+        break;
+      case 404:
+        throw const ApiException('Not found.');
+      case 422:
+        throw const ApiException(
+          'That request is not valid. Try a model, part, or fault code.',
+        );
+      case 503:
+        throw const ApiException(
+          'The server is not fully available right now. Try again shortly.',
+        );
+      default:
+        throw ApiException(
+          'Server error (${response.statusCode}). Try again shortly.',
+        );
     }
-    if (response.statusCode != 200) {
-      throw ApiException(
-        'Server error (${response.statusCode}). Try again shortly.',
-      );
-    }
+
     try {
-      return SearchResponse.fromJson(
-        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
-      );
+      return jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
       throw const ApiException('Unexpected server response.');
+    }
+  }
+}
+
+class HttpSearchApi implements SearchApi {
+  HttpSearchApi({http.Client? client, String baseUrl = apiBaseUrl})
+    : _backend = _BackendClient(client: client, baseUrl: baseUrl);
+
+  final _BackendClient _backend;
+
+  @override
+  Future<SearchResponse> search(String query) async {
+    final json = await _backend.requestJson(
+      'POST',
+      '/api/v1/search',
+      body: {'query': query},
+    );
+    try {
+      return SearchResponse.fromJson(json as Map<String, dynamic>);
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+}
+
+class HttpMachinesApi implements MachinesApi {
+  HttpMachinesApi({http.Client? client, String baseUrl = apiBaseUrl})
+    : _backend = _BackendClient(client: client, baseUrl: baseUrl);
+
+  final _BackendClient _backend;
+
+  @override
+  Future<List<MachineSummary>> findByModelNumber(String modelNumber) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/machines',
+      queryParameters: {'model_number': modelNumber},
+    );
+    try {
+      return (json as List<dynamic>)
+          .map((m) => MachineSummary.fromJson(m as Map<String, dynamic>))
+          .toList();
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+
+  @override
+  Future<MachineDocuments> machineDocuments(String machineId) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/machines/$machineId/documents',
+    );
+    try {
+      return MachineDocuments.fromJson(json as Map<String, dynamic>);
     } on TypeError {
       throw const ApiException('Unexpected server response.');
     }
