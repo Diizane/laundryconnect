@@ -2,23 +2,14 @@
 
 import asyncio
 import time
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter
 
-from app.core.config import Settings, get_settings
-from app.providers.registry import ProviderRegistry, RegisteredProvider
+from app.api.deps import RegistryDep, SettingsDep
+from app.providers.registry import RegisteredProvider
 from app.schemas.providers import ProvidersStatusResponse, ProviderStatusItem
 
 router = APIRouter(prefix="/providers", tags=["providers"])
-
-
-def get_provider_registry(request: Request) -> ProviderRegistry:
-    return request.app.state.provider_registry
-
-
-RegistryDep = Annotated[ProviderRegistry, Depends(get_provider_registry)]
-SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 async def _check_one(entry: RegisteredProvider, timeout_seconds: float) -> ProviderStatusItem:
