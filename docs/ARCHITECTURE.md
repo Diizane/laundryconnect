@@ -6,7 +6,7 @@
 +---------------------+       +----------------------+
 |  Flutter mobile app |       |  React admin portal  |
 |  (apps/mobile)      |       |  (apps/admin)        |
-|  [not started]      |       |  [not started]       |
+|  [active, M5]       |       |  [not started]       |
 +----------+----------+       +-----------+----------+
            |                              |
            +-------------+----------------+
@@ -72,6 +72,24 @@ readiness reports honestly either way (see ADR 0005).
 
 Planned additions as milestones deliver (see [ROADMAP.md](ROADMAP.md)):
 `documents/` (ingestion and page-level indexing, Milestone 7).
+
+## Mobile structure (current)
+
+```
+apps/mobile/lib/
+  main.dart
+  src/
+    app.dart          Root widget; SearchApi injectable for tests
+    theme/            Navy/teal brand theme
+    api/              HttpSearchApi (API_BASE_URL via --dart-define)
+    models/           Dart mirrors of backend search schemas
+    screens/          Home search (idle/loading/results/empty/error states)
+    widgets/          Result cards, data-origin + metadata badges
+```
+
+The app holds no credentials and talks only to the LaundryConnect backend.
+State management is plain `StatefulWidget` + a sealed state class — no
+state-management package until complexity demands one.
 
 Separation rules:
 

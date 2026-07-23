@@ -26,8 +26,14 @@ laundryconnect/
 
 ## Current status
 
-**Milestones 1–4 complete** (Foundation, Provider connector framework,
-Unified search, Core database). The backend provides:
+**Milestones 1–5 complete** (Foundation, Provider connector framework,
+Unified search, Core database, Flutter foundation).
+
+The Flutter app ([apps/mobile](apps/mobile)) provides the technician-facing
+universal search: navy/teal minimalist UI, machine-grouped results with
+data-origin badges, and explicit loading/empty/error/partial-failure states.
+
+The backend provides:
 
 - FastAPI application with versioned routes under `/api/v1`
 - Health endpoints (`/api/v1/health`, `/health/live`, `/health/ready`)

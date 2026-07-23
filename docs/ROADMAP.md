@@ -51,11 +51,18 @@ increment. See git history for exact progress.
 - [x] App still starts without a database (DATABASE_URL optional)
 - [x] 19 new tests (repositories, migrations, readiness, session dependency)
 
-## Milestone 5 — Flutter foundation
+## Milestone 5 — Flutter foundation ✅
 
-App scaffold, LaundryConnect theme (navy/teal, minimalist), home search
-screen, API client, loading/results/error states, provider status
-indicators, navigation, widget tests.
+- [x] Flutter scaffold (Android + iOS platforms, Android-first)
+- [x] Navy/teal minimalist LaundryConnect theme
+- [x] Home search screen: universal search bar, idle/loading/results/empty/
+      error states, retry
+- [x] API client for `POST /api/v1/search` with technician-friendly error
+      messages (`API_BASE_URL` via --dart-define)
+- [x] Machine-grouped results with data-origin, provider, type, revision badges
+- [x] Partial-provider-failure warning banner
+- [x] 10 tests (model parsing + widget tests for every state)
+- [x] CI job: flutter analyze, format check, test
 
 ## Milestone 6 — Machine workspace
 
