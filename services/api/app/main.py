@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
+from app.providers.registry import build_registry
 from app.schemas.health import ApiMetadata
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.environment != "production" else None,
         redoc_url=None,
     )
+
+    app.state.provider_registry = build_registry(settings)
 
     app.add_middleware(RequestContextMiddleware)
     if settings.cors_origin_list:

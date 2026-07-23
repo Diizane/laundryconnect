@@ -35,9 +35,26 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed CORS origins (admin portal, dev tools).
     cors_origins: str = ""
 
+    # Comma-separated provider connector ids to enable (see
+    # app/providers/registry.py). Only the mock connector exists so far;
+    # production must configure this explicitly once real connectors land.
+    enabled_providers: str = "mock"
+
+    # Per-provider search timeout: a slow provider delays a search response
+    # by at most this long and is then reported as timed_out.
+    provider_timeout_seconds: float = 10.0
+
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return _split_csv(self.cors_origins)
+
+    @property
+    def enabled_provider_list(self) -> list[str]:
+        return _split_csv(self.enabled_providers)
+
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 @lru_cache
