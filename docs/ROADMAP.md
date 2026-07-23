@@ -28,11 +28,16 @@ increment. See git history for exact progress.
 - [x] `GET /api/v1/providers/status` endpoint
 - [x] 22 new tests (registry, mock connector, status route)
 
-## Milestone 3 — Unified search
+## Milestone 3 — Unified search ✅
 
-Search request/response models, query type detection (auto/model/serial/part/
-fault_code/keyword), parallel provider search, normalisation, deduplication,
-ranking, grouping, cache-ready design, tests.
+- [x] `POST /api/v1/search` with request validation (blank/overlong rejected)
+- [x] Heuristic query-type detection for `auto` (model/serial/part/fault_code/keyword)
+- [x] Parallel provider fan-out (composes Milestone 2 registry)
+- [x] Deduplication (source_url / type+model+title+revision identity)
+- [x] Exact-identifier ranking boost
+- [x] Machine-first grouped response with per-provider outcomes
+- [x] Cache-ready service shape (pure request→response; no cache until needed)
+- [x] 38 new tests (detection, dedup/rank/group, route, partial failure)
 
 ## Milestone 4 — Core database
 

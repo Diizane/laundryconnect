@@ -26,11 +26,14 @@ laundryconnect/
 
 ## Current status
 
-**Milestones 1–2 complete** (Foundation, Provider connector framework). The
-backend provides:
+**Milestones 1–3 complete** (Foundation, Provider connector framework,
+Unified search). The backend provides:
 
 - FastAPI application with versioned routes under `/api/v1`
 - Health endpoints (`/api/v1/health`, `/health/live`, `/health/ready`)
+- Unified search (`POST /api/v1/search`): query-type detection
+  (model/serial/part/fault code/keyword), deduplication, ranking, and
+  machine-grouped results with per-provider outcomes
 - Provider connector framework: base interface, registry, parallel fan-out
   search with per-provider timeouts and partial-failure handling
 - A mock provider connector serving clearly-labelled sample data

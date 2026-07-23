@@ -57,7 +57,9 @@ app/
   core/             Config, logging, middleware, error handling
   api/
     router.py       /api/v1 route aggregation
-    routes/         Route modules (health, providers; search in Milestone 3)
+    deps.py         Shared route dependencies
+    routes/         Route modules (health, providers, search)
+  search/           Query-type detection, dedup/rank/group, search service
   providers/        Connector framework: base interface, registry, mock connector
   schemas/          Pydantic response/request models
   tests/            pytest suite
