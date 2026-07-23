@@ -28,8 +28,14 @@ Models live in `app/models/`, repositories in `app/repositories/`:
   unique (provider, source_reference).
 - **model_documents** — model↔document association, composite PK.
 - **document_pages** (M7) — page-level extracted text: document FK (indexed),
-  page_number, text_content; unique (document, page_number). The unit of
-  in-document search and future RAG citations.
+  page_number, text_content, text_source (native_pdf / ocr /
+  provider_supplied / manual_entry / seeded_sample); unique
+  (document, page_number). The unit of in-document search and future RAG
+  citations.
+
+Documents additionally carry `origin` (seeded_sample / live / uploaded /
+cached) so sample content can never be presented as official provider data
+(ADR 0009).
 
 Repositories: `ProviderRepository`, `MachineRepository` (manufacturer/brand
 get-or-create, model create/find), `DocumentRepository` (create, associate
