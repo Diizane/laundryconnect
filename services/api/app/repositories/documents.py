@@ -1,6 +1,8 @@
 """Document repository: documents and model associations."""
 
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import func, select
@@ -13,6 +15,14 @@ from app.models import Document, DocumentPage, MachineModel, ModelDocument
 # maximum is planned as an offset parameter once real manuals need it.
 DEFAULT_SEARCH_LIMIT = 20
 MAX_SEARCH_LIMIT = 50
+
+
+@dataclass(frozen=True)
+class PageInput:
+    """One page to index; `truncated` marks text cut at the extraction cap."""
+
+    text: str
+    truncated: bool = False
 
 
 def _escape_like(query: str) -> str:
@@ -75,7 +85,7 @@ class DocumentRepository:
             await self._session.flush()
 
     async def replace_pages(
-        self, document: Document, page_texts: list[str], text_source: str
+        self, document: Document, page_texts: Sequence[str | PageInput], text_source: str
     ) -> int:
         """Replace a document's indexed pages with freshly extracted text.
 
@@ -96,13 +106,15 @@ class DocumentRepository:
         # (document_id, page_number) constraint. Both flushes share the
         # caller's transaction, so rollback still restores the old pages.
         await self._session.flush()
-        for number, text in enumerate(page_texts, start=1):
+        for number, page_input in enumerate(page_texts, start=1):
+            page = page_input if isinstance(page_input, PageInput) else PageInput(text=page_input)
             self._session.add(
                 DocumentPage(
                     document_id=document.id,
                     page_number=number,
-                    text_content=text,
+                    text_content=page.text,
                     text_source=text_source,
+                    truncated=page.truncated,
                 )
             )
         await self._session.flush()

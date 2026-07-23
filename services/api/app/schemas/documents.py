@@ -32,6 +32,9 @@ class DocumentPageContent(BaseModel):
     page_number: int
     text_content: str
     text_source: str
+    # True when extraction cut this page's text at the per-page cap; clients
+    # (and future RAG citations) must not treat truncated text as complete.
+    truncated: bool
 
 
 class PageSearchHit(BaseModel):

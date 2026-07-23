@@ -126,8 +126,10 @@ Separation rules:
 
 - Search will run providers in parallel with per-provider timeouts; partial
   failure is a first-class response state, never a 500.
-- Document processing will be page-level (index and serve pages, not whole
-  PDFs in memory).
+- Document storage, search, and serving are page-level (pages, not whole
+  PDFs). Note: ingestion itself materialises a manual's extracted text in
+  memory (bounded by extraction limits) before atomically replacing pages —
+  see ADR 0010; it is not a streaming pipeline.
 - Retrieval-augmented AI answers must cite document + page; the document
   system's page-level indexing is designed to support that.
 - Offline support: keep API responses cacheable and self-describing so the

@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from enum import StrEnum
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -65,6 +65,9 @@ class DocumentPage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     page_number: Mapped[int] = mapped_column(Integer)
     text_content: Mapped[str] = mapped_column(Text)
     text_source: Mapped[str] = mapped_column(String(30))
+    # True when extraction cut the text at the per-page cap — truncation is
+    # never silent (incomplete search results and citations must be visible).
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)
 
     document: Mapped[Document] = relationship(back_populates="pages")
 

@@ -83,6 +83,7 @@ async def get_document_page(
         page_number=page.page_number,
         text_content=page.text_content,
         text_source=page.text_source,
+        truncated=page.truncated,
     )
 
 

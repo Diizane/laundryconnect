@@ -114,3 +114,22 @@ async def test_pages_carry_seeded_sample_provenance(db_session: AsyncSession) ->
     page = await DocumentRepository(db_session).get_page(document.id, 1)
     assert page is not None
     assert page.text_source == PageTextSource.SEEDED_SAMPLE.value
+    assert page.truncated is False
+
+
+async def test_truncation_flag_persisted_and_exposed(db_session: AsyncSession) -> None:
+    from app.repositories.documents import PageInput
+
+    document = await _document_with_pages(db_session)
+    repo = DocumentRepository(db_session)
+    await repo.replace_pages(
+        document,
+        [PageInput(text="full page"), PageInput(text="cut page", truncated=True)],
+        text_source=PageTextSource.NATIVE_PDF.value,
+    )
+    await db_session.commit()
+
+    first = await repo.get_page(document.id, 1)
+    second = await repo.get_page(document.id, 2)
+    assert first is not None and first.truncated is False
+    assert second is not None and second.truncated is True

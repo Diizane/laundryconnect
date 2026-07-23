@@ -89,9 +89,24 @@ increment. See git history for exact progress.
 
 ## Milestone 8 — First real provider
 
-One provider only: documented authentication approach, compliant connector,
-health validation, normalisation, error handling, integration test strategy,
-clear separation of real and mock data.
+One provider only, as a proof of architecture. The connector must include
+(overseer-required checklist):
+
+- [ ] Explicit authorization and provider terms review before any access
+- [ ] Backend-only credentials (environment/secret manager; never mobile)
+- [ ] Session expiry handling
+- [ ] Provider rate limiting
+- [ ] Timeout and retry policy
+- [ ] Structured failure reporting (per-provider outcomes, typed errors)
+- [ ] Source provenance on every record (origin=live, text_source)
+- [ ] Document caching rules (respecting provider terms)
+- [ ] No credentials or provider HTML in logs
+- [ ] Fixture-based tests only in CI — never the live service
+- [ ] Extraction in an isolated worker process with hard timeout and
+      resource limits before processing provider documents (ADR 0010)
+
+Explicitly out of scope during this milestone: AI chat, OCR, ordering,
+inventory, admin portal expansion, additional providers.
 
 ## Post-MVP direction
 

@@ -39,6 +39,7 @@ def test_document_page_content(seeded_client: TestClient) -> None:
     assert "EdL" in body["text_content"]
     assert body["text_content"].startswith("SAMPLE PAGE.")
     assert body["text_source"] == "seeded_sample"
+    assert body["truncated"] is False
 
 
 def test_document_page_out_of_range_404(seeded_client: TestClient) -> None:
