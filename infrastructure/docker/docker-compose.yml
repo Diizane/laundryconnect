@@ -1,0 +1,41 @@
+# Local development stack: API + PostgreSQL.
+# Run from the repository root:
+#   docker compose -f infrastructure/docker/docker-compose.yml up --build
+#
+# The default postgres credentials below are for LOCAL DEVELOPMENT ONLY.
+# Production uses managed secrets — see docs/SECURITY.md.
+
+name: laundryconnect
+
+services:
+  api:
+    build:
+      context: ../../services/api
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+asyncpg://laundryconnect:laundryconnect@db:5432/laundryconnect
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: laundryconnect
+      POSTGRES_PASSWORD: laundryconnect
+      POSTGRES_DB: laundryconnect
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laundryconnect"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
