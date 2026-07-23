@@ -54,4 +54,6 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 # S101: assert is expected in tests.
 # S105/S106: redaction tests use deliberate fake credentials.
-"app/tests/**" = ["S101", "S105", "S106"]
+# S603/S607: worker-lifecycle tests assert on child processes via
+# fixed-argv pgrep/ps — no untrusted input reaches the shell.
+"app/tests/**" = ["S101", "S105", "S106", "S603", "S607"]

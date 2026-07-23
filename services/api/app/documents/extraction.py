@@ -29,6 +29,11 @@ logger = logging.getLogger(__name__)
 MAX_FILE_BYTES = 100 * 1024 * 1024  # 100 MB
 MAX_PAGES = 1500
 MAX_TEXT_CHARS_PER_PAGE = 20_000
+# Aggregate cap across ALL pages: bounds the whole-document materialisation
+# and the worker JSON payload (which duplicates the text across process
+# boundaries — see ADR 0011). 5M chars covers observed laundry manuals with
+# ample margin; larger manuals need the staged-storage path, not a bigger cap.
+MAX_TOTAL_TEXT_CHARS = 5_000_000
 # COOPERATIVE limit: checked between pages only. It cannot interrupt a hung
 # page.extract_text() call. Before accepting arbitrary uploads or live
 # provider documents, extraction must run in an isolated worker process
@@ -44,6 +49,7 @@ class ExtractionFailure(StrEnum):
     FILE_ACCESS = "file_access"
     FILE_TOO_LARGE = "file_too_large"
     TOO_MANY_PAGES = "too_many_pages"
+    TOTAL_TEXT_TOO_LARGE = "total_text_too_large"
     TIMEOUT = "timeout"
 
 
@@ -52,6 +58,7 @@ class ExtractionLimits:
     max_file_bytes: int = MAX_FILE_BYTES
     max_pages: int = MAX_PAGES
     max_text_chars_per_page: int = MAX_TEXT_CHARS_PER_PAGE
+    max_total_text_chars: int = MAX_TOTAL_TEXT_CHARS
     max_seconds: float = MAX_EXTRACTION_SECONDS
 
 
@@ -143,6 +150,7 @@ def extract_page_texts(
             )
 
         started = time.monotonic()
+        total_chars = 0
         for index, page in enumerate(reader.pages, start=1):
             if time.monotonic() - started > limits.max_seconds:
                 raise ExtractionError(
@@ -171,4 +179,11 @@ def extract_page_texts(
                     },
                 )
                 text = text[: limits.max_text_chars_per_page]
+
+            total_chars += len(text)
+            if total_chars > limits.max_total_text_chars:
+                raise ExtractionError(
+                    ExtractionFailure.TOTAL_TEXT_TOO_LARGE,
+                    f"aggregate text exceeds {limits.max_total_text_chars} chars at page {index}",
+                )
             yield ExtractedPage(text=text, truncated=truncated)
