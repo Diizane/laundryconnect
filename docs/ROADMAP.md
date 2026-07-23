@@ -92,7 +92,10 @@ increment. See git history for exact progress.
 One provider only, as a proof of architecture. The connector must include
 (overseer-required checklist):
 
-- [ ] Explicit authorization and provider terms review before any access
+- [ ] Explicit authorization and provider terms review before any access —
+      IN PROGRESS: access decision record drafted for Alliance Laundry
+      Systems, classified UNKNOWN pending account-owner input
+      (docs/PROVIDER_ACCESS/alliance-laundry-systems.md)
 - [ ] Backend-only credentials (environment/secret manager; never mobile)
 - [ ] Session expiry handling
 - [ ] Provider rate limiting
