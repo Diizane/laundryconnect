@@ -26,18 +26,24 @@ laundryconnect/
 
 ## Current status
 
-**Milestone 1 — Foundation** (in progress). The backend provides:
+**Milestones 1–2 complete** (Foundation, Provider connector framework). The
+backend provides:
 
 - FastAPI application with versioned routes under `/api/v1`
 - Health endpoints (`/api/v1/health`, `/health/live`, `/health/ready`)
+- Provider connector framework: base interface, registry, parallel fan-out
+  search with per-provider timeouts and partial-failure handling
+- A mock provider connector serving clearly-labelled sample data
+  (`data_origin=mock`) — **no real provider integrations exist yet**
+- Provider status endpoint (`/api/v1/providers/status`)
 - Environment-based configuration (`pydantic-settings`)
 - Structured JSON logging with request IDs
 - Structured error responses (no stack traces to clients)
 - pytest test suite and Ruff linting
 - Dockerfile and Docker Compose with PostgreSQL
 
-There are **no provider integrations yet** and **no mock data presented as
-live data**. See [docs/ROADMAP.md](docs/ROADMAP.md) for the milestone plan.
+Mock data is never presented as live data — every result carries an honest
+`data_origin` label. See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan.
 
 ## Quick start (backend)
 

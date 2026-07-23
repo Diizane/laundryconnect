@@ -39,13 +39,22 @@ services/api/app/
     exceptions.py    Structured error envelope, no stack traces to clients
   api/
     router.py        /api/v1 aggregation
-    routes/health.py Health, liveness, readiness
+    routes/
+      health.py      Health, liveness, readiness
+      providers.py   Provider status (health-checks each connector)
+  providers/
+    base.py          ProviderConnector interface
+    models.py        Normalised results, outcomes, query types, data origins
+    registry.py      Registry + parallel fan-out search with timeouts
+    mock/            Mock connector (labelled sample data, fault injection)
   schemas/           Pydantic models for requests/responses
-  tests/             pytest suite (16 tests)
+  tests/             pytest suite (38 tests)
 ```
 
+The provider registry is built at startup from `ENABLED_PROVIDERS` and stored
+on `app.state`; routes access it via a dependency.
+
 Planned additions as milestones deliver (see [ROADMAP.md](ROADMAP.md)):
-`providers/` (base interface, registry, per-provider packages, mock),
 `search/`, `documents/`, `models/` (SQLAlchemy), `repositories/`,
 `database/` (session, Alembic migrations), `services/` (business logic).
 

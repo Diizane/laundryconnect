@@ -3,7 +3,7 @@
 Milestones are delivered in order; each produces a working, reviewable
 increment. See git history for exact progress.
 
-## Milestone 1 — Foundation ✅ (this milestone)
+## Milestone 1 — Foundation ✅
 
 - [x] Repository structure and documentation set
 - [x] FastAPI application with app factory
@@ -17,10 +17,16 @@ increment. See git history for exact progress.
 - [x] `.env.example`, backend README
 - [x] GitHub Actions CI (lint + format + tests)
 
-## Milestone 2 — Provider connector framework
+## Milestone 2 — Provider connector framework ✅
 
-Provider base interface, registry, mock provider, provider status model,
-timeout and partial-failure handling, tests, documentation.
+- [x] `ProviderConnector` base interface (search, health, credential validation)
+- [x] Normalised result models with honest `data_origin` labelling
+- [x] Provider registry built from `ENABLED_PROVIDERS` (fails fast on typos)
+- [x] Parallel fan-out search with per-provider timeouts
+- [x] Partial failure as first-class outcome (one provider never breaks search)
+- [x] Mock connector with labelled sample data and fault injection
+- [x] `GET /api/v1/providers/status` endpoint
+- [x] 22 new tests (registry, mock connector, status route)
 
 ## Milestone 3 — Unified search
 

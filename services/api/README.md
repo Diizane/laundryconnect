@@ -46,6 +46,8 @@ Configuration is environment-based via `pydantic-settings`. See
 | `LOG_LEVEL`    | `INFO`        | Root log level                             |
 | `DATABASE_URL` | *(empty)*     | PostgreSQL DSN (used from Milestone 4)     |
 | `CORS_ORIGINS` | *(empty)*     | Comma-separated allowed origins            |
+| `ENABLED_PROVIDERS` | `mock`   | Provider connectors to enable              |
+| `PROVIDER_TIMEOUT_SECONDS` | `10` | Per-provider search/health timeout      |
 
 ## Structure
 
@@ -55,7 +57,8 @@ app/
   core/             Config, logging, middleware, error handling
   api/
     router.py       /api/v1 route aggregation
-    routes/         Route modules (health; search etc. in later milestones)
+    routes/         Route modules (health, providers; search in Milestone 3)
+  providers/        Connector framework: base interface, registry, mock connector
   schemas/          Pydantic response/request models
   tests/            pytest suite
 ```
