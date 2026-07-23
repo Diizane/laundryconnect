@@ -41,6 +41,21 @@ void main() {
     expect(find.text('Rev 4'), findsOneWidget);
   });
 
+  testWidgets('every document tile shows its data-origin badge', (
+    tester,
+  ) async {
+    await _pumpWorkspace(
+      tester,
+      api: FakeMachinesApi(),
+      store: FakeWorkspaceStore(),
+    );
+    await tester.pumpAndSettle();
+
+    // Both seeded documents are visibly labelled — sample content can
+    // never be presented as official provider data.
+    expect(find.text('SEEDED SAMPLE'), findsNWidgets(2));
+  });
+
   testWidgets('records the machine as recently viewed', (tester) async {
     final store = FakeWorkspaceStore();
     await _pumpWorkspace(tester, api: FakeMachinesApi(), store: store);

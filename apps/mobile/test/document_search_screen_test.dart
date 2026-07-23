@@ -52,6 +52,8 @@ void main() {
 
     expect(find.text('Page 2'), findsOneWidget); // app bar
     expect(find.textContaining('SAMPLE PAGE 2'), findsOneWidget);
+    // Page provenance is always visible on the page view.
+    expect(find.text('SEEDED SAMPLE'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('next-page')));
     await tester.pumpAndSettle();

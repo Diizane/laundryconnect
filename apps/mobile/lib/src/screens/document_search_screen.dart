@@ -292,9 +292,22 @@ class _DocumentPageScreenState extends State<DocumentPageScreen> {
     }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Text(
-        content.textContent,
-        style: const TextStyle(fontSize: 15, height: 1.5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              DataOriginBadge(content.textSource),
+              const SizedBox(width: 6),
+              InfoBadge(widget.document.provider),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            content.textContent,
+            style: const TextStyle(fontSize: 15, height: 1.5),
+          ),
+        ],
       ),
     );
   }

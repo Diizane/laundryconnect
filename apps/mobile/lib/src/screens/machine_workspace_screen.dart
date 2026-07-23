@@ -248,6 +248,7 @@ class _DocumentTile extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
+                        DataOriginBadge(document.origin),
                         InfoBadge(document.provider),
                         if (document.revision != null)
                           InfoBadge(document.revision!),

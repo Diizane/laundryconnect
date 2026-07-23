@@ -24,6 +24,7 @@ MachineDocuments sc60Documents() => const MachineDocuments(
           title: 'SC60 Service Manual (sample)',
           documentType: 'service_manual',
           provider: 'mock',
+          origin: 'seeded_sample',
           revision: 'Rev 4',
         ),
       ],
@@ -36,6 +37,7 @@ MachineDocuments sc60Documents() => const MachineDocuments(
           title: 'SC60 Wiring Diagram (sample)',
           documentType: 'wiring_diagram',
           provider: 'mock',
+          origin: 'seeded_sample',
         ),
       ],
     ),
@@ -82,6 +84,7 @@ const sampleServiceManual = DocumentItem(
   title: 'SC60 Service Manual (sample)',
   documentType: 'service_manual',
   provider: 'mock',
+  origin: 'seeded_sample',
   revision: 'Rev 4',
 );
 
@@ -126,6 +129,7 @@ class FakeDocumentsApi implements DocumentsApi {
         pageNumber: pageNumber,
         textContent:
             'SAMPLE PAGE $pageNumber. Fault code table. EdL: door lock error.',
+        textSource: 'seeded_sample',
       ),
     );
   }

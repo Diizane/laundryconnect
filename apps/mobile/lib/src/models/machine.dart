@@ -44,6 +44,7 @@ class DocumentItem {
     required this.title,
     required this.documentType,
     required this.provider,
+    required this.origin,
     this.sourceUrl,
     this.revision,
     this.publishedAt,
@@ -54,6 +55,10 @@ class DocumentItem {
   final String title;
   final String documentType;
   final String provider;
+
+  /// seeded_sample / live / uploaded / cached — always shown as a badge so
+  /// sample content can never pass as official provider data.
+  final String origin;
   final String? sourceUrl;
   final String? revision;
   final String? publishedAt;
@@ -64,6 +69,7 @@ class DocumentItem {
     title: json['title'] as String,
     documentType: json['document_type'] as String,
     provider: json['provider'] as String,
+    origin: json['origin'] as String? ?? 'unknown',
     sourceUrl: json['source_url'] as String?,
     revision: json['revision'] as String?,
     publishedAt: json['published_at'] as String?,

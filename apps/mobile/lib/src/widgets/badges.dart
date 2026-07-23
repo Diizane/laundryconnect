@@ -43,8 +43,8 @@ class DataOriginBadge extends StatelessWidget {
     final color = switch (origin) {
       'live' => AppColors.teal,
       'cached' => AppColors.warning,
-      _ => Colors.blueGrey, // mock / manual sample data
+      _ => Colors.blueGrey, // mock / seeded_sample / manual sample data
     };
-    return InfoBadge(origin.toUpperCase(), color: color);
+    return InfoBadge(origin.replaceAll('_', ' ').toUpperCase(), color: color);
   }
 }

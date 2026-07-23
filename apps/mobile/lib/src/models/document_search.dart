@@ -51,14 +51,20 @@ class DocumentPageContent {
   const DocumentPageContent({
     required this.pageNumber,
     required this.textContent,
+    required this.textSource,
   });
 
   final int pageNumber;
   final String textContent;
 
+  /// native_pdf / ocr / provider_supplied / manual_entry / seeded_sample —
+  /// shown so a technician always knows what kind of text they are reading.
+  final String textSource;
+
   factory DocumentPageContent.fromJson(Map<String, dynamic> json) =>
       DocumentPageContent(
         pageNumber: json['page_number'] as int,
         textContent: json['text_content'] as String,
+        textSource: json['text_source'] as String? ?? 'unknown',
       );
 }
