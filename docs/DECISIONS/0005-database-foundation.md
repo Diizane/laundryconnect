@@ -45,3 +45,12 @@ and a repository layer.
 - Timestamps are application-generated (`datetime.now(UTC)`), keeping SQLite
   and PostgreSQL behaviour identical; if DB-server time becomes important,
   revisit with `server_default=func.now()` in a migration.
+
+## Amendment (2026-07-23, Docker verification)
+
+Timestamp columns are now `DateTime(timezone=True)` (migration
+`4a1f0b2c9d3e`). The original naive columns worked on SQLite but PostgreSQL
+(asyncpg) rejects aware UTC datetimes for naive `timestamp` columns — caught
+the first time the stack ran against real PostgreSQL in Docker. This is
+exactly the class of dialect gap the "SQLite for tests" trade-off predicted;
+container verification is now part of the release checklist.

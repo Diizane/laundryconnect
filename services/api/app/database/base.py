@@ -9,7 +9,7 @@ Conventions (see docs/DATA_MODEL.md):
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import MetaData, Uuid
+from sqlalchemy import DateTime, MetaData, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -34,5 +34,11 @@ class UUIDPrimaryKeyMixin:
 
 
 class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow, nullable=False)
+    # timezone=True is required for PostgreSQL: the app supplies aware UTC
+    # datetimes, which asyncpg rejects for naive timestamp columns.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
