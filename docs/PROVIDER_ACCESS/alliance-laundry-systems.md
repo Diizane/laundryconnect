@@ -6,20 +6,54 @@
 - Decision owner: business account owner (pending)
 - Prepared by: engineering (Milestone 8 Task 3)
 
-> Method note: this record was prepared WITHOUT any live request to any
-> Alliance system and without automation code, per the Task 3 instruction.
-> Every item below is marked **[verified]** (established in this project's
-> context) or **[unverified]** (requires account-owner or provider
+> Method note: this record was prepared WITHOUT logging in and WITHOUT
+> automation code. Only unauthenticated, public pages were viewed
+> (login page, robots.txt, sitemap index) — no credentials were entered
+> and no authenticated request was made. Every item below is marked
+> **[verified]** (established in this project's context or by that public
+> reconnaissance) or **[unverified]** (requires account-owner or provider
 > confirmation). Nothing unverified may be treated as permission.
+
+## 0. Public reconnaissance findings (no login, 2026-07-23)
+
+Established by viewing only unauthenticated pages of
+`portal.alliancels.net`:
+
+- The portal is a **Salesforce Experience Cloud (Communities) site**
+  — confirmed by the `/s/` path, the Salesforce "Sorry to interrupt / CSS
+  Error" dialog, and a stock `sfdc communities` `robots.txt`.
+  **[verified]** Implication worth pursuing: Salesforce-backed sites often
+  expose an official API (Salesforce Experience Cloud / Connect REST /
+  CMS Delivery API) — an official channel may exist and should be asked
+  about (section 3) before any portal automation is considered.
+- **The content is login-gated.** The landing page is a bare
+  username/password gate (plus an "ALS EMPLOYEE LOGIN" button); the
+  manuals/parts content requires authentication. **[verified]**
+- **No public terms-of-use, privacy, or acceptable-use link is present on
+  the login page.** The governing terms sit behind the login (likely
+  presented at account provisioning or inside the authenticated area) and
+  therefore have NOT been reviewed. **[verified — absence on public page]**
+- `robots.txt` is the permissive Salesforce default (`Allow: /`). This
+  governs **public-page crawling by search engines only** and is **not**
+  permission for authenticated, programmatic access — which is what a
+  connector would perform. **[verified]**
+- The public sitemap index exposes managed content (views, news, CMS
+  documents, CMS images). Whether any *needed technical documentation* is
+  public versus behind the login is **[unverified]**; the service content
+  appears authentication-gated.
+
+None of this changes the classification: the terms that actually govern
+automated access are behind the login and remain unreviewed.
 
 ## 1. Provider and portal name
 
 - Provider: Alliance Laundry Systems (manufacturer; brands include Speed
   Queen, UniMac, Huebsch, IPSO). **[verified — project context]**
-- Exact portal(s) the business account can access (e.g. a partner/service
-  portal, technical-documentation site, parts system), their URLs, and
-  which of them hold the manuals/parts/wiring content LaundryConnect
-  needs: **[unverified — account owner must enumerate]**
+- Portal: `portal.alliancels.net` — a Salesforce Experience Cloud service
+  portal (login-gated). **[verified — public reconnaissance]**
+- Which portal area(s)/objects hold the manuals/parts/wiring content the
+  app needs, behind the login: **[unverified — account owner must
+  enumerate]**
 
 ## 2. Account ownership
 
@@ -35,7 +69,9 @@
 - Whether Alliance offers any official/partner API for documentation,
   parts, or model data, and whether this account qualifies for it:
   **[unverified]**. If an official API exists, it is strongly preferred
-  over any portal automation.
+  over any portal automation. The portal being Salesforce-based makes an
+  official API surface plausible (Salesforce Connect REST / CMS Delivery
+  API) — worth asking Alliance directly.
 
 ## 4. Terms governing automated access
 
@@ -74,8 +110,12 @@
 
 ## 9. Credential and session handling
 
-- Portal authentication mechanism (form login, SSO, MFA, session
-  lifetime): **[unverified]**
+- Portal authentication mechanism: a **Salesforce Experience Cloud form
+  login** (username/password on the public page; a separate "ALS EMPLOYEE
+  LOGIN" path exists for staff). Whether MFA is enforced for this account
+  and the typical session lifetime are **[unverified]**. A credential was
+  pasted into chat during this task and must be treated as compromised and
+  rotated (SECURITY.md); it was not stored or used.
 - LaundryConnect handling regardless: credentials backend-only via
   environment/secret manager; never in the mobile app, repository, logs,
   or CI; sessions refreshed server-side; any credential ever exposed is
@@ -103,13 +143,18 @@
 
 ## Classification
 
-**UNKNOWN.**
+**UNKNOWN** (unchanged after public reconnaissance).
 
-The items that determine legality and compliance of automated access
-(sections 1 sub-item, 2–8, 10–11) cannot be verified from the repository,
-the project brief, or any source available to engineering without either
-the account owner's information or a reviewed copy of the portal terms.
-Classifying anything other than UNKNOWN would be fabrication.
+Public reconnaissance identified the portal (Salesforce Experience Cloud,
+login-gated) and the login mechanism, and confirmed that no terms are
+published on the public pages. But the items that determine legality and
+compliance of automated access — the authenticated portal's terms of use,
+the account agreement/tier, official API availability, and
+indexing/caching/retention permissions — sit behind the login and cannot
+be verified without the account owner's information or a reviewed copy of
+the terms. `robots.txt` permissiveness applies to public-page crawling
+only and is not permission for authenticated automation. Classifying
+anything other than UNKNOWN would be fabrication.
 
 Per Task 3 instructions: **work stops here.** No connector skeleton,
 configuration model, fixtures, or tests are created while the position is
