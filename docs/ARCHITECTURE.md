@@ -42,6 +42,7 @@ services/api/app/
     deps.py          Shared dependencies (settings, registry, search service)
     routes/
       health.py      Health, liveness, readiness
+      machines.py    Machine lookup/detail + documents grouped by category
       providers.py   Provider status (health-checks each connector)
       search.py      POST /api/v1/search
   search/
@@ -83,7 +84,8 @@ apps/mobile/lib/
     theme/            Navy/teal brand theme
     api/              HttpSearchApi (API_BASE_URL via --dart-define)
     models/           Dart mirrors of backend search schemas
-    screens/          Home search (idle/loading/results/empty/error states)
+    screens/          Home search + machine workspace
+    storage/          On-device recents/bookmarks (shared_preferences)
     widgets/          Result cards, data-origin + metadata badges
 ```
 

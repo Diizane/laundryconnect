@@ -26,12 +26,14 @@ laundryconnect/
 
 ## Current status
 
-**Milestones 1–5 complete** (Foundation, Provider connector framework,
-Unified search, Core database, Flutter foundation).
+**Milestones 1–6 complete** (Foundation, Provider connector framework,
+Unified search, Core database, Flutter foundation, Machine workspace).
 
 The Flutter app ([apps/mobile](apps/mobile)) provides the technician-facing
-universal search: navy/teal minimalist UI, machine-grouped results with
-data-origin badges, and explicit loading/empty/error/partial-failure states.
+universal search — navy/teal minimalist UI, machine-grouped results with
+data-origin badges, explicit loading/empty/error/partial-failure states —
+plus the machine workspace: model metadata, documents grouped by category,
+on-device recents, and bookmarks.
 
 The backend provides:
 

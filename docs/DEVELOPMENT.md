@@ -64,6 +64,12 @@ Review the generated file, run `ruff format` on it, and keep the
 migration-parity test green (`app/tests/test_migrations.py`). Unit tests run
 against SQLite (aiosqlite) — see ADR 0005 for the trade-offs.
 
+Populate the catalog with clearly-labelled sample data (idempotent):
+
+```bash
+DATABASE_URL=... uv run python -m app.database.seed
+```
+
 ## Dependency management
 
 `services/api/pyproject.toml` is the source of truth. `requirements.txt` is

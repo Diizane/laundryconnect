@@ -64,10 +64,18 @@ increment. See git history for exact progress.
 - [x] 10 tests (model parsing + widget tests for every state)
 - [x] CI job: flutter analyze, format check, test
 
-## Milestone 6 — Machine workspace
+## Milestone 6 — Machine workspace ✅
 
-Machine detail screen, document categories, model metadata, documents grouped
-by type, recent items, bookmarks foundation.
+- [x] Backend: `GET /api/v1/machines?model_number=`, `/machines/{id}`,
+      `/machines/{id}/documents` (grouped by document type)
+- [x] Idempotent sample-data seed (`python -m app.database.seed`)
+- [x] Mobile: machine workspace screen — metadata header, categorised
+      documents, loading/error/empty states
+- [x] Search result → workspace navigation (honest miss message when the
+      catalog doesn't know the model)
+- [x] On-device recents (capped, deduplicated) and bookmarks with home-screen
+      quick access
+- [x] 11 backend tests + 13 mobile tests
 
 ## Milestone 7 — Document search
 
