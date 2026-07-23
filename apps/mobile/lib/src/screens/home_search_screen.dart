@@ -16,11 +16,13 @@ class HomeSearchScreen extends StatefulWidget {
     super.key,
     required this.searchApi,
     required this.machinesApi,
+    required this.documentsApi,
     required this.store,
   });
 
   final SearchApi searchApi;
   final MachinesApi machinesApi;
+  final DocumentsApi documentsApi;
   final WorkspaceStore store;
 
   @override
@@ -105,6 +107,7 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
         builder: (_) => MachineWorkspaceScreen(
           machine: machine,
           machinesApi: widget.machinesApi,
+          documentsApi: widget.documentsApi,
           store: widget.store,
         ),
       ),

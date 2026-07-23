@@ -5,6 +5,7 @@ import '../models/machine.dart';
 import '../storage/workspace_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/badges.dart';
+import 'document_search_screen.dart';
 
 /// Machine workspace: model metadata header plus documents grouped by
 /// category. Opened from a search result or from recents/bookmarks.
@@ -13,11 +14,13 @@ class MachineWorkspaceScreen extends StatefulWidget {
     super.key,
     required this.machine,
     required this.machinesApi,
+    required this.documentsApi,
     required this.store,
   });
 
   final MachineSummary machine;
   final MachinesApi machinesApi;
+  final DocumentsApi documentsApi;
   final WorkspaceStore store;
 
   @override
@@ -131,7 +134,17 @@ class _MachineWorkspaceScreenState extends State<MachineWorkspaceScreen> {
           for (final document in category.documents)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: _DocumentTile(document: document),
+              child: _DocumentTile(
+                document: document,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => DocumentSearchScreen(
+                      document: document,
+                      documentsApi: widget.documentsApi,
+                    ),
+                  ),
+                ),
+              ),
             ),
         ],
       ],
@@ -202,48 +215,53 @@ class _CategoryHeader extends StatelessWidget {
 }
 
 class _DocumentTile extends StatelessWidget {
-  const _DocumentTile({required this.document});
+  const _DocumentTile({required this.document, required this.onTap});
 
   final DocumentItem document;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.menu_book_outlined,
-              color: theme.colorScheme.primary,
-              size: 26,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(document.title, style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      InfoBadge(document.provider),
-                      if (document.revision != null)
-                        InfoBadge(document.revision!),
-                      if (document.publishedAt != null)
-                        InfoBadge(document.publishedAt!),
-                      if (document.language != null)
-                        InfoBadge(document.language!.toUpperCase()),
-                    ],
-                  ),
-                ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.menu_book_outlined,
+                color: theme.colorScheme.primary,
+                size: 26,
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(document.title, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        InfoBadge(document.provider),
+                        if (document.revision != null)
+                          InfoBadge(document.revision!),
+                        if (document.publishedAt != null)
+                          InfoBadge(document.publishedAt!),
+                        if (document.language != null)
+                          InfoBadge(document.language!.toUpperCase()),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

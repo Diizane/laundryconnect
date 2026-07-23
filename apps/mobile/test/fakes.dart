@@ -1,4 +1,5 @@
 import 'package:laundryconnect/src/api/api_client.dart';
+import 'package:laundryconnect/src/models/document_search.dart';
 import 'package:laundryconnect/src/models/machine.dart';
 import 'package:laundryconnect/src/models/search.dart';
 import 'package:laundryconnect/src/storage/workspace_store.dart';
@@ -73,6 +74,60 @@ class FakeMachinesApi implements MachinesApi {
     final handler = documentsHandler;
     if (handler != null) return handler(machineId);
     return Future.value(sc60Documents());
+  }
+}
+
+const sampleServiceManual = DocumentItem(
+  id: 'doc-1',
+  title: 'SC60 Service Manual (sample)',
+  documentType: 'service_manual',
+  provider: 'mock',
+  revision: 'Rev 4',
+);
+
+class FakeDocumentsApi implements DocumentsApi {
+  FakeDocumentsApi({this.searchHandler, this.pageHandler});
+
+  final Future<DocumentSearchResult> Function(String documentId, String query)?
+  searchHandler;
+  final Future<DocumentPageContent> Function(String documentId, int pageNumber)?
+  pageHandler;
+
+  @override
+  Future<DocumentSearchResult> searchInDocument(
+    String documentId,
+    String query,
+  ) {
+    final handler = searchHandler;
+    if (handler != null) return handler(documentId, query);
+    return Future.value(
+      DocumentSearchResult(
+        query: query,
+        totalHits: 1,
+        hits: [
+          PageSearchHit(
+            documentId: documentId,
+            documentTitle: 'SC60 Service Manual (sample)',
+            provider: 'mock',
+            pageNumber: 2,
+            snippet: '…EdL: door lock error - check assembly F8524501…',
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Future<DocumentPageContent> getPage(String documentId, int pageNumber) {
+    final handler = pageHandler;
+    if (handler != null) return handler(documentId, pageNumber);
+    return Future.value(
+      DocumentPageContent(
+        pageNumber: pageNumber,
+        textContent:
+            'SAMPLE PAGE $pageNumber. Fault code table. EdL: door lock error.',
+      ),
+    );
   }
 }
 

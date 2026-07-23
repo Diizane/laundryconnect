@@ -56,6 +56,7 @@ Widget _app(
 }) => LaundryConnectApp(
   searchApi: searchApi,
   machinesApi: machinesApi ?? FakeMachinesApi(),
+  documentsApi: FakeDocumentsApi(),
   store: store ?? FakeWorkspaceStore(),
 );
 

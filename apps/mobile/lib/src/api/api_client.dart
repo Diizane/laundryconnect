@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../models/document_search.dart';
 import '../models/machine.dart';
 import '../models/search.dart';
 
@@ -37,6 +38,15 @@ abstract interface class MachinesApi {
   Future<List<MachineSummary>> findByModelNumber(String modelNumber);
 
   Future<MachineDocuments> machineDocuments(String machineId);
+}
+
+abstract interface class DocumentsApi {
+  Future<DocumentSearchResult> searchInDocument(
+    String documentId,
+    String query,
+  );
+
+  Future<DocumentPageContent> getPage(String documentId, int pageNumber);
 }
 
 /// Shared request plumbing: timeouts, connectivity errors, status handling,
@@ -124,6 +134,43 @@ class HttpSearchApi implements SearchApi {
     );
     try {
       return SearchResponse.fromJson(json as Map<String, dynamic>);
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+}
+
+class HttpDocumentsApi implements DocumentsApi {
+  HttpDocumentsApi({http.Client? client, String baseUrl = apiBaseUrl})
+    : _backend = _BackendClient(client: client, baseUrl: baseUrl);
+
+  final _BackendClient _backend;
+
+  @override
+  Future<DocumentSearchResult> searchInDocument(
+    String documentId,
+    String query,
+  ) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/documents/$documentId/search',
+      queryParameters: {'q': query},
+    );
+    try {
+      return DocumentSearchResult.fromJson(json as Map<String, dynamic>);
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+
+  @override
+  Future<DocumentPageContent> getPage(String documentId, int pageNumber) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/documents/$documentId/pages/$pageNumber',
+    );
+    try {
+      return DocumentPageContent.fromJson(json as Map<String, dynamic>);
     } on TypeError {
       throw const ApiException('Unexpected server response.');
     }

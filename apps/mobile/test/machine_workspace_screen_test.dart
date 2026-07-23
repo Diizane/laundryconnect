@@ -20,6 +20,7 @@ Future<void> _pumpWorkspace(
       home: MachineWorkspaceScreen(
         machine: sc60,
         machinesApi: api,
+        documentsApi: FakeDocumentsApi(),
         store: store,
       ),
     ),
