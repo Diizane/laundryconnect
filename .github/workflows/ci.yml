@@ -31,3 +31,30 @@ jobs:
 
       - name: Tests (pytest)
         run: pytest -v
+
+  mobile:
+    name: Mobile analyze and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Format check
+        run: dart format --set-exit-if-changed lib test
+
+      - name: Tests
+        run: flutter test
