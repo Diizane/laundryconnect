@@ -37,3 +37,7 @@ apps/mobile/.flutter-plugins*
 .idea/
 .vscode/
 *.swp
+
+# Key material (from original scaffold ignore rules)
+*.pem
+*.key
