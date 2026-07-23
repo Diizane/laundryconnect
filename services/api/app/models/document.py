@@ -7,6 +7,7 @@ from sqlalchemy import Date, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.provider import Provider
 
 
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -22,6 +23,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     published_at: Mapped[date | None] = mapped_column(Date)
     language: Mapped[str | None] = mapped_column(String(20))
 
+    provider: Mapped[Provider] = relationship()
     model_links: Mapped[list["ModelDocument"]] = relationship(back_populates="document")
 
 

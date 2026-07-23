@@ -7,9 +7,10 @@ providers, admin) register here as milestones deliver them.
 
 from fastapi import APIRouter
 
-from app.api.routes import health, providers, search
+from app.api.routes import health, machines, providers, search
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health.router)
+api_v1_router.include_router(machines.router)
 api_v1_router.include_router(providers.router)
 api_v1_router.include_router(search.router)

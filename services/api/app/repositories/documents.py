@@ -5,6 +5,7 @@ from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.models import Document, MachineModel, ModelDocument
 
@@ -41,6 +42,16 @@ class DocumentRepository:
     async def get(self, document_id: uuid.UUID) -> Document | None:
         return await self._session.get(Document, document_id)
 
+    async def get_by_source_reference(
+        self, provider_id: uuid.UUID, source_reference: str
+    ) -> Document | None:
+        return await self._session.scalar(
+            select(Document).where(
+                Document.provider_id == provider_id,
+                Document.source_reference == source_reference,
+            )
+        )
+
     async def associate_with_model(self, document: Document, model: MachineModel) -> None:
         existing = await self._session.get(ModelDocument, (model.id, document.id))
         if existing is None:
@@ -50,6 +61,7 @@ class DocumentRepository:
     async def list_for_model(self, model_id: uuid.UUID) -> list[Document]:
         result = await self._session.scalars(
             select(Document)
+            .options(joinedload(Document.provider))
             .join(ModelDocument, ModelDocument.document_id == Document.id)
             .where(ModelDocument.machine_model_id == model_id)
             .order_by(Document.document_type, Document.title)
