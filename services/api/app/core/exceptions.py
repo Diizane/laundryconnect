@@ -8,6 +8,7 @@ Clients always receive a consistent error envelope and never a stack trace:
 import logging
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -49,11 +50,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # errors() can contain non-serialisable objects (e.g. the raising
+        # ValueError in ctx) — encode before shipping to the client.
         return _error_response(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "validation_error",
             "Request validation failed.",
-            details=exc.errors(),
+            details=jsonable_encoder(exc.errors(), custom_encoder={Exception: str}),
         )
 
     @app.exception_handler(Exception)
