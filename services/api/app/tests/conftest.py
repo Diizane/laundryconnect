@@ -29,6 +29,38 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 
 
 @pytest.fixture
+def seeded_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """A client whose app uses a SQLite database with schema + sample data."""
+    import asyncio
+
+    from app.database.seed import seed
+
+    db_url = f"sqlite+aiosqlite:///{tmp_path}/seeded.db"
+
+    async def prepare() -> None:
+        engine = create_engine(db_url)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        factory = create_session_factory(engine)
+        async with factory() as session:
+            await seed(session)
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(prepare())
+
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    get_settings.cache_clear()
+    app = create_app()
+    try:
+        with TestClient(app, raise_server_exceptions=False) as test_client:
+            yield test_client
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.fixture
 async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
     """A session against a fresh SQLite database with the full schema.
 

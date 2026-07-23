@@ -36,6 +36,7 @@ class SampleDocument:
     revision: str | None = None
     published_at: date | None = None
     language: str = "en"
+    pages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,19 @@ SAMPLE_MACHINES: tuple[SampleMachine, ...] = (
                 "service_manual",
                 revision="Rev 4",
                 published_at=date(2023, 5, 1),
+                pages=(
+                    "SAMPLE PAGE. SC60 Washer-Extractor Service Manual. Table of"
+                    " contents: 1. Safety information 2. Specifications 3. Fault"
+                    " codes 4. Maintenance procedures 5. Component replacement.",
+                    "SAMPLE PAGE. Fault code table. EdL: door lock error - the"
+                    " door lock assembly failed to engage. Check door lock"
+                    " assembly part F8524501 and wiring harness. E13: drain"
+                    " timeout - verify drain valve operation and drain line.",
+                    "SAMPLE PAGE. Door lock replacement procedure. Disconnect"
+                    " power before servicing. Remove the front panel, disconnect"
+                    " the door lock harness, replace assembly F8524501, torque"
+                    " fasteners to specification and test the interlock.",
+                ),
             ),
             SampleDocument(
                 "mock-doc-sc60-parts",
@@ -92,6 +106,14 @@ SAMPLE_MACHINES: tuple[SampleMachine, ...] = (
                 "installation_manual",
                 revision="Rev 1",
                 published_at=date(2021, 3, 10),
+                pages=(
+                    "SAMPLE PAGE. HS-6008 installation requirements: level"
+                    " concrete floor, clearance 500 mm at rear, water supply"
+                    " 20-80 psi, drain diameter 76 mm.",
+                    "SAMPLE PAGE. Electrical connection: 400V 3-phase supply,"
+                    " dedicated circuit breaker, earth connection mandatory."
+                    " Refer to the wiring diagram before connecting power.",
+                ),
             ),
             SampleDocument(
                 "mock-doc-hs6008-operation",
@@ -113,7 +135,7 @@ async def seed(session: AsyncSession) -> dict[str, int]:
     providers = ProviderRepository(session)
     machines = MachineRepository(session)
     documents = DocumentRepository(session)
-    created = {"providers": 0, "models": 0, "documents": 0}
+    created = {"providers": 0, "models": 0, "documents": 0, "pages": 0}
 
     provider = await providers.get_by_slug("mock")
     if provider is None:
@@ -150,6 +172,9 @@ async def seed(session: AsyncSession) -> dict[str, int]:
                 )
                 created["documents"] += 1
             await documents.associate_with_model(document, model)
+
+            if doc.pages and await documents.page_count(document.id) == 0:
+                created["pages"] += await documents.replace_pages(document, list(doc.pages))
 
     return created
 

@@ -8,7 +8,7 @@ from app.repositories.providers import ProviderRepository
 
 async def test_seed_creates_sample_catalog(db_session: AsyncSession) -> None:
     created = await seed(db_session)
-    assert created == {"providers": 1, "models": 2, "documents": 5}
+    assert created == {"providers": 1, "models": 2, "documents": 5, "pages": 5}
 
     provider = await ProviderRepository(db_session).get_by_slug("mock")
     assert provider is not None
@@ -23,4 +23,4 @@ async def test_seed_creates_sample_catalog(db_session: AsyncSession) -> None:
 async def test_seed_is_idempotent(db_session: AsyncSession) -> None:
     await seed(db_session)
     second_run = await seed(db_session)
-    assert second_run == {"providers": 0, "models": 0, "documents": 0}
+    assert second_run == {"providers": 0, "models": 0, "documents": 0, "pages": 0}
