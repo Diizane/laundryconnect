@@ -1,40 +1,43 @@
-# Environment and credentials
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-
 # Python
 __pycache__/
 *.py[cod]
-.pytest_cache/
+*.egg-info/
 .venv/
 venv/
-
-# Flutter / Dart
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-build/
-.pub-cache/
-
-# Node
-node_modules/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
 dist/
-.next/
+build/
 
-# IDE
+# Environment / secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Node / React (admin portal, future)
+node_modules/
+apps/admin/dist/
+
+# Flutter / Dart (mobile, future)
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins*
+
+# Local databases (SQLite dev/test files)
+*.db
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editors / OS
+.DS_Store
 .idea/
 .vscode/
 *.swp
 
-# Operating systems
-.DS_Store
-Thumbs.db
-
-# Local data
-*.db
-*.sqlite
-*.sqlite3
+# Key material (from original scaffold ignore rules)
+*.pem
+*.key

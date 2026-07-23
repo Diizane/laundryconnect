@@ -1,48 +1,56 @@
-# LaundryConnect Product Vision
+# Product Vision
 
-## Mission
+LaundryConnect is a unified technical knowledge platform for commercial laundry
+service technicians.
 
-Give commercial laundry technicians one place to access every piece of
-information required to install, operate, maintain, diagnose and repair
-commercial laundry equipment.
+It is **not** merely a parts finder, a manual library, a document viewer, or a
+search box over PDFs. It is the technician's complete workspace for finding and
+using information about commercial laundry equipment.
 
-## Core problem
+## The problem
 
-Technical information is spread across slow and disorganised manufacturer
-and distributor portals. Large manuals are difficult to navigate, and
-technicians lose time locating the correct information while on site.
-
-## Product principles
-
-1. Search all available sources from one place.
-2. Organise information around machines and technician tasks.
-3. Preserve the original manuals as authoritative sources.
-4. Make large and complex manuals easier to navigate.
-5. Help technicians reach the correct information in the fewest possible taps.
-6. Clearly distinguish verified source information from generated summaries.
-7. Keep provider credentials secure and outside the mobile application.
-
-## Technician activities
-
-- Installation
-- Operation
-- Preventative maintenance
-- Diagnosis
-- Repair
-- Parts identification
-- Electrical and wiring work
-- Programming
-- Technical bulletin review
-
-## Initial providers
+Technicians lose significant time because manuals, diagrams, parts information,
+wiring diagrams, technical bulletins, service instructions, and maintenance
+information are spread across multiple manufacturer and distributor portals —
+initially:
 
 - Alliance Laundry Systems
 - Girbau
 - Richard Jay Service
 
-## Future sources
+Each portal has separate credentials, different search systems, slow
+interfaces, inconsistent organisation, and large technical manuals that are
+difficult to navigate. The most time is wasted:
 
-- Official public manufacturer documents
-- Company-uploaded manuals
-- Technician notes
-- Additional provider portals
+- finding the correct manual
+- finding the correct section inside a large manual
+- confirming that a part applies to the exact machine
+- locating wiring and diagnostic information
+- identifying model or serial-specific documentation
+- switching repeatedly between portals
+
+## The principle
+
+Every major feature is evaluated against one question:
+
+> Does this help a technician standing in front of a machine find the correct
+> information in as few steps as possible?
+
+Typical technician conditions: on a phone or tablet, standing at a machine,
+limited time, possibly poor connectivity, needing correct information fast and
+confidence that it applies to the exact machine.
+
+## Source of truth
+
+The official manuals and provider documents remain the source of truth.
+LaundryConnect makes them easier to find, navigate, search, reference, and use.
+Any future AI assistance must be grounded in retrieved document content, cite
+source document and page, and make uncertainty explicit — never a generic
+chatbot answering from general model knowledge.
+
+## Scope guardrails
+
+- Parts lookup is one component of the wider machine knowledge workspace, not
+  the product.
+- Mock, demo, manual, and live provider data must always be clearly labelled.
+- No unauthorised scraping or access-control bypasses; respect provider terms.
