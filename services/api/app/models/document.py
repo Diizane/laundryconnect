@@ -1,9 +1,9 @@
-"""Documents and their machine-model associations."""
+"""Documents, page-level content, and machine-model associations."""
 
 import uuid
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -25,6 +25,24 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     provider: Mapped[Provider] = relationship()
     model_links: Mapped[list["ModelDocument"]] = relationship(back_populates="document")
+    pages: Mapped[list["DocumentPage"]] = relationship(back_populates="document")
+
+
+class DocumentPage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Page-level extracted text: the unit of in-document search.
+
+    Large manuals are indexed and served page by page — whole PDFs are never
+    loaded into memory to answer a search.
+    """
+
+    __tablename__ = "document_pages"
+    __table_args__ = (UniqueConstraint("document_id", "page_number"),)
+
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), index=True)
+    page_number: Mapped[int] = mapped_column(Integer)
+    text_content: Mapped[str] = mapped_column(Text)
+
+    document: Mapped[Document] = relationship(back_populates="pages")
 
 
 class ModelDocument(TimestampMixin, Base):

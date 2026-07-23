@@ -37,6 +37,8 @@ pydantic-core==2.46.4
     # via pydantic
 pydantic-settings==2.14.2
     # via laundryconnect-api (pyproject.toml)
+pypdf==6.14.2
+    # via laundryconnect-api (pyproject.toml)
 python-dotenv==1.2.2
     # via
     #   pydantic-settings

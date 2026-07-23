@@ -3,11 +3,11 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models import Document, MachineModel, ModelDocument
+from app.models import Document, DocumentPage, MachineModel, ModelDocument
 
 
 class DocumentRepository:
@@ -57,6 +57,56 @@ class DocumentRepository:
         if existing is None:
             self._session.add(ModelDocument(machine_model_id=model.id, document_id=document.id))
             await self._session.flush()
+
+    async def replace_pages(self, document: Document, page_texts: list[str]) -> int:
+        """Replace a document's indexed pages with freshly extracted text."""
+        existing = await self._session.scalars(
+            select(DocumentPage).where(DocumentPage.document_id == document.id)
+        )
+        for page in existing:
+            await self._session.delete(page)
+        for number, text in enumerate(page_texts, start=1):
+            self._session.add(
+                DocumentPage(document_id=document.id, page_number=number, text_content=text)
+            )
+        await self._session.flush()
+        return len(page_texts)
+
+    async def page_count(self, document_id: uuid.UUID) -> int:
+        result = await self._session.scalar(
+            select(func.count())
+            .select_from(DocumentPage)
+            .where(DocumentPage.document_id == document_id)
+        )
+        return int(result or 0)
+
+    async def get_page(self, document_id: uuid.UUID, page_number: int) -> DocumentPage | None:
+        return await self._session.scalar(
+            select(DocumentPage).where(
+                DocumentPage.document_id == document_id,
+                DocumentPage.page_number == page_number,
+            )
+        )
+
+    async def search_pages(
+        self, document_id: uuid.UUID, query: str, limit: int = 20
+    ) -> list[DocumentPage]:
+        """Case-insensitive substring search over a document's pages.
+
+        Portable ILIKE for now; PostgreSQL full-text (tsvector) replaces this
+        when real manuals arrive — see ADR 0008.
+        """
+        pattern = f"%{query}%"
+        result = await self._session.scalars(
+            select(DocumentPage)
+            .where(
+                DocumentPage.document_id == document_id,
+                DocumentPage.text_content.ilike(pattern),
+            )
+            .order_by(DocumentPage.page_number)
+            .limit(limit)
+        )
+        return list(result)
 
     async def list_for_model(self, model_id: uuid.UUID) -> list[Document]:
         result = await self._session.scalars(
