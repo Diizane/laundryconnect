@@ -101,9 +101,10 @@ One provider only, as a proof of architecture. The connector must include
 - [ ] Source provenance on every record (origin=live, text_source)
 - [ ] Document caching rules (respecting provider terms)
 - [ ] No credentials or provider HTML in logs
-- [ ] Fixture-based tests only in CI — never the live service
-- [ ] Extraction in an isolated worker process with hard timeout and
-      resource limits before processing provider documents (ADR 0010)
+- [x] Fixture-based tests only in CI — never the live service
+      (ConnectorContract harness + fixture policy, ADR 0011)
+- [x] Extraction in an isolated worker process with hard timeout and
+      resource limits before processing provider documents (ADR 0011)
 
 Explicitly out of scope during this milestone: AI chat, OCR, ordering,
 inventory, admin portal expansion, additional providers.
