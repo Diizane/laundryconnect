@@ -26,6 +26,9 @@ apps/mobile/.dart_tool/
 apps/mobile/build/
 apps/mobile/.flutter-plugins*
 
+# Local databases (SQLite dev/test files)
+*.db
+
 # Claude Code local settings
 .claude/settings.local.json
 

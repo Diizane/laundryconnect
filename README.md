@@ -26,8 +26,8 @@ laundryconnect/
 
 ## Current status
 
-**Milestones 1–3 complete** (Foundation, Provider connector framework,
-Unified search). The backend provides:
+**Milestones 1–4 complete** (Foundation, Provider connector framework,
+Unified search, Core database). The backend provides:
 
 - FastAPI application with versioned routes under `/api/v1`
 - Health endpoints (`/api/v1/health`, `/health/live`, `/health/ready`)
@@ -39,6 +39,9 @@ Unified search). The backend provides:
 - A mock provider connector serving clearly-labelled sample data
   (`data_origin=mock`) — **no real provider integrations exist yet**
 - Provider status endpoint (`/api/v1/providers/status`)
+- Core database: async SQLAlchemy + Alembic migrations, initial schema
+  (providers, manufacturers, brands, machine models, documents) and a
+  repository layer — the app still runs without a database configured
 - Environment-based configuration (`pydantic-settings`)
 - Structured JSON logging with request IDs
 - Structured error responses (no stack traces to clients)

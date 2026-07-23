@@ -39,11 +39,17 @@ increment. See git history for exact progress.
 - [x] Cache-ready service shape (pure request→response; no cache until needed)
 - [x] 38 new tests (detection, dedup/rank/group, route, partial failure)
 
-## Milestone 4 — Core database
+## Milestone 4 — Core database ✅
 
-PostgreSQL integration, SQLAlchemy, Alembic, initial models (Provider,
-Manufacturer, Brand, MachineModel, Document, ModelDocument), repository
-layer, tests.
+- [x] Async SQLAlchemy 2.0 + asyncpg (production) / aiosqlite (tests)
+- [x] Initial schema: providers, manufacturers, brands, machine_models,
+      documents, model_documents
+- [x] Alembic migrations, verified by up/down/parity tests
+- [x] Repository layer (providers, machines, documents) — flush, never commit
+- [x] Request-scoped session dependency (commit/rollback; 503 when no DB)
+- [x] Real readiness check (`SELECT 1`, timeout, 503 when failing)
+- [x] App still starts without a database (DATABASE_URL optional)
+- [x] 19 new tests (repositories, migrations, readiness, session dependency)
 
 ## Milestone 5 — Flutter foundation
 

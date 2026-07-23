@@ -53,16 +53,25 @@ services/api/app/
     models.py        Normalised results, outcomes, query types, data origins
     registry.py      Registry + parallel fan-out search with timeouts
     mock/            Mock connector (labelled sample data, fault injection)
+  models/            SQLAlchemy ORM models (catalog, documents, providers)
+  repositories/      All database access (flush, never commit)
+  database/
+    base.py          Declarative base, UUID/timestamp mixins, naming convention
+    session.py       Async engine + session factory
+    migrations/      Alembic environment and versions
   schemas/           Pydantic models for requests/responses
-  tests/             pytest suite (76 tests)
+  tests/             pytest suite (95 tests)
 ```
 
 The provider registry is built at startup from `ENABLED_PROVIDERS` and stored
 on `app.state`; routes access it via a dependency.
 
+The database is optional at startup: the engine is created only when
+`DATABASE_URL` is set, session-dependent routes return 503 otherwise, and
+readiness reports honestly either way (see ADR 0005).
+
 Planned additions as milestones deliver (see [ROADMAP.md](ROADMAP.md)):
-`documents/`, `models/` (SQLAlchemy), `repositories/`,
-`database/` (session, Alembic migrations).
+`documents/` (ingestion and page-level indexing, Milestone 7).
 
 Separation rules:
 

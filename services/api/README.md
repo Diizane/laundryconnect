@@ -61,6 +61,9 @@ app/
     routes/         Route modules (health, providers, search)
   search/           Query-type detection, dedup/rank/group, search service
   providers/        Connector framework: base interface, registry, mock connector
+  models/           SQLAlchemy ORM models
+  repositories/     Database access layer
+  database/         Base, session factory, Alembic migrations
   schemas/          Pydantic response/request models
   tests/            pytest suite
 ```

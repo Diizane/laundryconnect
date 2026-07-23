@@ -41,6 +41,29 @@ docker compose -f infrastructure/docker/docker-compose.yml up --build
 Brings up the API on :8000 and PostgreSQL 16 on :5432. The compose credentials
 are local-development-only placeholders.
 
+## Database and migrations
+
+The app runs without a database until `DATABASE_URL` is set (session-backed
+endpoints return 503; readiness reports the check as skipped).
+
+Apply migrations (uses `DATABASE_URL` from the environment):
+
+```bash
+cd services/api
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/laundryconnect \
+  uv run alembic upgrade head
+```
+
+Create a new migration after changing models in `app/models/`:
+
+```bash
+DATABASE_URL=sqlite+aiosqlite:///./local-dev.db uv run alembic revision --autogenerate -m "describe change"
+```
+
+Review the generated file, run `ruff format` on it, and keep the
+migration-parity test green (`app/tests/test_migrations.py`). Unit tests run
+against SQLite (aiosqlite) — see ADR 0005 for the trade-offs.
+
 ## Dependency management
 
 `services/api/pyproject.toml` is the source of truth. `requirements.txt` is

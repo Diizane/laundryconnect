@@ -1,31 +1,37 @@
 # Data Model
 
-> Status: **design document**. Database integration lands in Milestone 4.
-> No tables exist yet.
+> Status: **initial schema implemented (Milestone 4)** — six tables under
+> Alembic migration `d95fc7d10b23`, accessed through the repository layer.
 
 ## Principles
 
 - Start with the minimum useful schema; document intended evolution here.
-- UUID primary keys.
+- UUID primary keys (application-generated, portable `sa.Uuid`).
 - `created_at` / `updated_at` timestamps on every table.
-- Database constraints and useful indexes from the start.
-- Alembic migrations from the first table.
+- Database constraints and useful indexes from the start; explicit
+  constraint-naming convention for deterministic migrations.
+- Alembic migrations from the first table (verified by tests).
 
-## Milestone 4 initial schema (planned)
+## Implemented schema (Milestone 4)
 
-The smallest set that supports unified search results and the machine
-workspace:
+Models live in `app/models/`, repositories in `app/repositories/`:
 
-- **Provider** — registry record: id, slug, name, enabled, base_url, notes.
-  (Credentials are *not* stored here — environment/secret manager only, see
-  [SECURITY.md](SECURITY.md).)
-- **Manufacturer** / **Brand** — machine origin hierarchy.
-- **MachineModel** — model number, manufacturer/brand, machine type, family,
-  metadata (voltage, configuration) as it becomes available.
-- **Document** — title, document_type, provider, source_url,
-  source_reference, revision, published_at, language, storage location (when
-  a copy is permitted).
-- **ModelDocument** — many-to-many association between models and documents.
+- **providers** — registry record: slug (unique), name, enabled, base_url,
+  notes. (Credentials are *not* stored here — environment/secret manager
+  only, see [SECURITY.md](SECURITY.md).)
+- **manufacturers** — name (unique).
+- **brands** — name, manufacturer FK; unique (manufacturer, name).
+- **machine_models** — model_number (indexed), brand FK, machine_type,
+  family; unique (brand, model_number).
+- **documents** — title, document_type (indexed), provider FK,
+  source_reference, source_url, revision, published_at, language;
+  unique (provider, source_reference).
+- **model_documents** — model↔document association, composite PK.
+
+Repositories: `ProviderRepository`, `MachineRepository` (manufacturer/brand
+get-or-create, model create/find), `DocumentRepository` (create, associate
+with model — idempotent, list per model). Repositories flush but never
+commit; the session dependency owns the transaction.
 
 ## Later entities (intended evolution)
 
