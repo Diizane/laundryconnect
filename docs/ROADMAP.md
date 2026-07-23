@@ -77,10 +77,15 @@ increment. See git history for exact progress.
       quick access
 - [x] 11 backend tests + 13 mobile tests
 
-## Milestone 7 — Document search
+## Milestone 7 — Document search ✅
 
-PDF metadata, page text extraction, page-level indexing, document search
-endpoint, page-referenced results, initial document viewer integration.
+- [x] `document_pages` table + migration (page-level text, unique per page)
+- [x] pypdf page extraction (lazy, per-page fault tolerance, fixture-tested)
+- [x] `GET /api/v1/documents/{id}` (metadata + page count), `/pages/{n}`,
+      `/search?q=` with page-cited hits and server-built snippets
+- [x] Seeded sample pages (fault codes, procedures — labelled SAMPLE)
+- [x] Mobile: in-document search screen + page text viewer with prev/next
+- [x] 14 new backend tests + 6 new mobile tests
 
 ## Milestone 8 — First real provider
 

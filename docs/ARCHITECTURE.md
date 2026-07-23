@@ -41,6 +41,7 @@ services/api/app/
     router.py        /api/v1 aggregation
     deps.py          Shared dependencies (settings, registry, search service)
     routes/
+      documents.py   Document metadata, page content, in-document search
       health.py      Health, liveness, readiness
       machines.py    Machine lookup/detail + documents grouped by category
       providers.py   Provider status (health-checks each connector)
@@ -54,7 +55,10 @@ services/api/app/
     models.py        Normalised results, outcomes, query types, data origins
     registry.py      Registry + parallel fan-out search with timeouts
     mock/            Mock connector (labelled sample data, fault injection)
-  models/            SQLAlchemy ORM models (catalog, documents, providers)
+  documents/
+    extraction.py    pypdf page-level text extraction (lazy, fault-tolerant)
+    snippets.py      Server-built search-hit snippets
+  models/            SQLAlchemy ORM models (catalog, documents+pages, providers)
   repositories/      All database access (flush, never commit)
   database/
     base.py          Declarative base, UUID/timestamp mixins, naming convention
@@ -72,7 +76,8 @@ The database is optional at startup: the engine is created only when
 readiness reports honestly either way (see ADR 0005).
 
 Planned additions as milestones deliver (see [ROADMAP.md](ROADMAP.md)):
-`documents/` (ingestion and page-level indexing, Milestone 7).
+compliant document fetching/ingestion jobs and the first real provider
+connector (Milestone 8).
 
 ## Mobile structure (current)
 

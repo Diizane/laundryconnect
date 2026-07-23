@@ -27,6 +27,9 @@ Models live in `app/models/`, repositories in `app/repositories/`:
   source_reference, source_url, revision, published_at, language;
   unique (provider, source_reference).
 - **model_documents** — model↔document association, composite PK.
+- **document_pages** (M7) — page-level extracted text: document FK (indexed),
+  page_number, text_content; unique (document, page_number). The unit of
+  in-document search and future RAG citations.
 
 Repositories: `ProviderRepository`, `MachineRepository` (manufacturer/brand
 get-or-create, model create/find), `DocumentRepository` (create, associate
@@ -37,8 +40,8 @@ commit; the session dependency owns the transaction.
 
 Grouped by the milestone that likely introduces them:
 
-- **Document search (M7):** DocumentPage (page-level text for full-text
-  search), DocumentCategory, IngestionJob.
+- **Document ingestion (M8):** DocumentCategory, IngestionJob; PostgreSQL
+  full-text indexing (tsvector) on document_pages.
 - **Serial/part support (M6+):** MachineSerialRange, MachineConfiguration,
   Part, PartSupersession, Diagram, DiagramItem, TechnicalBulletin.
 - **Users and company features (post-MVP):** User, Company, Bookmark,
