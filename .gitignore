@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+dist/
+build/
+
+# Environment / secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Node / React (admin portal, future)
+node_modules/
+apps/admin/dist/
+
+# Flutter / Dart (mobile, future)
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins*
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

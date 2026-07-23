@@ -1,0 +1,63 @@
+# Roadmap
+
+Milestones are delivered in order; each produces a working, reviewable
+increment. See git history for exact progress.
+
+## Milestone 1 — Foundation ✅ (this milestone)
+
+- [x] Repository structure and documentation set
+- [x] FastAPI application with app factory
+- [x] Versioned API routes (`/api/v1`)
+- [x] Environment-based configuration (pydantic-settings)
+- [x] Structured JSON logging with request IDs and redaction guard
+- [x] Health, liveness, readiness endpoints
+- [x] Structured error responses (no stack traces to clients)
+- [x] pytest suite (16 tests) and Ruff linting
+- [x] Dockerfile + Docker Compose with PostgreSQL
+- [x] `.env.example`, backend README
+- [x] GitHub Actions CI (lint + format + tests)
+
+## Milestone 2 — Provider connector framework
+
+Provider base interface, registry, mock provider, provider status model,
+timeout and partial-failure handling, tests, documentation.
+
+## Milestone 3 — Unified search
+
+Search request/response models, query type detection (auto/model/serial/part/
+fault_code/keyword), parallel provider search, normalisation, deduplication,
+ranking, grouping, cache-ready design, tests.
+
+## Milestone 4 — Core database
+
+PostgreSQL integration, SQLAlchemy, Alembic, initial models (Provider,
+Manufacturer, Brand, MachineModel, Document, ModelDocument), repository
+layer, tests.
+
+## Milestone 5 — Flutter foundation
+
+App scaffold, LaundryConnect theme (navy/teal, minimalist), home search
+screen, API client, loading/results/error states, provider status
+indicators, navigation, widget tests.
+
+## Milestone 6 — Machine workspace
+
+Machine detail screen, document categories, model metadata, documents grouped
+by type, recent items, bookmarks foundation.
+
+## Milestone 7 — Document search
+
+PDF metadata, page text extraction, page-level indexing, document search
+endpoint, page-referenced results, initial document viewer integration.
+
+## Milestone 8 — First real provider
+
+One provider only: documented authentication approach, compliant connector,
+health validation, normalisation, error handling, integration test strategy,
+clear separation of real and mock data.
+
+## Post-MVP direction
+
+Technician accounts and roles, offline caching and downloaded manuals,
+part confirmation by serial range, retrieval-augmented document Q&A with
+citations, admin portal build-out, additional providers.
