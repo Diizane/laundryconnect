@@ -148,6 +148,29 @@ automated access are behind the login and remain unreviewed.
 5. Is written permission from an Alliance representative obtainable? (The
    strongest position; recommended.)
 
+## Live search VALIDATED (2026-07-25)
+
+A second supervised production search confirmed the end-to-end live search
+pipeline:
+
+- The search for `SC60` returned **40 results** (`200 OK` from
+  `pc.alliancels.net`).
+- Parsing **matched the frozen regression fixture** (`alliance_parts_sc60.html`);
+  the production HTML structure is unchanged from the capture.
+- **No duplicate rows** — every result carried a unique, stable
+  `source_reference` (`als-model-{ModelId}`).
+- **Attribution correct** — each result is a normalised `model` record with a
+  `pc.alliancels.net` `source_url` and `origin=live`.
+- **No account-specific information** appeared in the output or logs
+  (session cookie count redacted; the only logged URL carried
+  `searchString=SC60`).
+
+Conclusion: the live Alliance search pipeline (generic transport +
+Parts Connection HTML parser + connector normalisation) is validated against
+current production. Document retrieval remains a separate, later milestone.
+`alliance_access_approved` stays false by default; the live run was a
+per-command, human-supervised opt-in.
+
 ## First supervised validation (2026-07-25)
 
 The operator ran one approved, search-only smoke test. Result: the
