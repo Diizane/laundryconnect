@@ -120,3 +120,26 @@ Session contents and credentials are never logged, returned, or stored as
 attributes; security tests assert repr/log safety, that CI cannot enter
 live mode, that repo-path sessions are rejected, and that expired sessions
 report `reauthentication_required`.
+
+Live search was validated end to end against production (40 SC60 results;
+see docs/PROVIDER_ACCESS/alliance-laundry-systems.md). The Parts Connection
+search HTML is parsed by `app/providers/alliance/parser.py`, pinned to a
+sanitised fixture.
+
+### Enabling Alliance in the search API
+
+Alliance is registered but **not enabled by default**
+(`ENABLED_PROVIDERS=mock`). To include it, list it explicitly
+(`ENABLED_PROVIDERS=mock,alliance`); it runs in fixture mode unless a
+configured environment additionally sets `ALLIANCE_MODE=session`,
+`ALLIANCE_ACCESS_APPROVED=true`, and a valid `ALLIANCE_SESSION_PATH`.
+
+Provider failures are local, never fatal to the search: `POST /api/v1/search`
+returns per-provider `providers[].status` — `success`, `timed_out`,
+`disabled`, `reauthentication_required` (session missing/invalid/expired),
+`forbidden` (access refused, e.g. 403), or `failed` (unavailable). One
+provider degrading never fails the response; other providers' results are
+returned. The search path performs **no database writes** — live Alliance
+results are not persisted (a cache/retention decision is a separate
+milestone). Document fetching, crawling, and background sync are not part of
+search.

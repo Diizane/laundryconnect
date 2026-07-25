@@ -99,7 +99,20 @@ class ProviderOutcome {
   final double? latencyMs;
   final int resultCount;
 
-  bool get isDegraded => status == 'failed' || status == 'timed_out';
+  bool get isDegraded =>
+      status == 'failed' ||
+      status == 'timed_out' ||
+      status == 'reauthentication_required' ||
+      status == 'forbidden';
+
+  /// A short, human-readable label for a degraded provider outcome.
+  String get statusLabel => switch (status) {
+    'timed_out' => 'timed out',
+    'reauthentication_required' => 'needs sign-in',
+    'forbidden' => 'access refused',
+    'failed' => 'unavailable',
+    _ => status,
+  };
 
   factory ProviderOutcome.fromJson(Map<String, dynamic> json) =>
       ProviderOutcome(

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from app.core.config import Settings
 from app.providers.alliance.connector import AllianceConnector
 from app.providers.base import ProviderConnector
-from app.providers.errors import ReauthenticationRequired
+from app.providers.errors import ProviderForbidden, ReauthenticationRequired
 from app.providers.mock.connector import MockProviderConnector
 from app.providers.models import (
     AggregatedSearch,
@@ -128,6 +128,22 @@ class ProviderRegistry:
                 ProviderOutcome(
                     provider_id=provider_id,
                     status=ProviderSearchStatus.REAUTH_REQUIRED,
+                    latency_ms=latency_ms(),
+                    error=type(exc).__name__,
+                ),
+                [],
+            )
+        except ProviderForbidden as exc:
+            # Distinct from a generic failure: access was refused (e.g. 403),
+            # a hard stop for human review — never retried.
+            logger.warning(
+                "provider refused access",
+                extra={"provider": provider_id, "error": type(exc).__name__},
+            )
+            return (
+                ProviderOutcome(
+                    provider_id=provider_id,
+                    status=ProviderSearchStatus.FORBIDDEN,
                     latency_ms=latency_ms(),
                     error=type(exc).__name__,
                 ),

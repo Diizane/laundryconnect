@@ -96,4 +96,25 @@ void main() {
       expect(response.providers.first.isDegraded, isFalse);
     });
   });
+
+  group('ProviderOutcome status handling', () {
+    ProviderOutcome outcome(String status) =>
+        ProviderOutcome(providerId: 'alliance', status: status);
+
+    test('reauth and forbidden count as degraded', () {
+      expect(outcome('reauthentication_required').isDegraded, isTrue);
+      expect(outcome('forbidden').isDegraded, isTrue);
+      expect(outcome('failed').isDegraded, isTrue);
+      expect(outcome('timed_out').isDegraded, isTrue);
+      expect(outcome('success').isDegraded, isFalse);
+      expect(outcome('disabled').isDegraded, isFalse);
+    });
+
+    test('status labels are human readable', () {
+      expect(outcome('reauthentication_required').statusLabel, 'needs sign-in');
+      expect(outcome('forbidden').statusLabel, 'access refused');
+      expect(outcome('failed').statusLabel, 'unavailable');
+      expect(outcome('timed_out').statusLabel, 'timed out');
+    });
+  });
 }
