@@ -20,12 +20,38 @@ bodies.
 import argparse
 import asyncio
 import sys
+from urllib.parse import urlsplit
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.providers.alliance.config import is_ci, require_live_allowed, resolve_mode
 from app.providers.alliance.connector import AllianceConnector
-from app.providers.models import QueryType
+from app.providers.models import ProviderResult, QueryType
+
+
+def sanitise_reference(ref: str | None) -> str:
+    """Return a log-safe form of a source reference.
+
+    Drops query strings, fragments, and any userinfo — where signed URLs
+    place tokens/signatures/session ids — leaving only host + path (for URL
+    references) or the bare identifier (for non-URL references). Never
+    returns credentials or signed parameters.
+    """
+    if not ref:
+        return ""
+    if "://" in ref:
+        parts = urlsplit(ref)
+        return f"{parts.hostname or ''}{parts.path}"
+    # Non-URL reference: still strip any accidental query/fragment.
+    return ref.split("?", 1)[0].split("#", 1)[0]
+
+
+def result_summary(result: ProviderResult) -> str:
+    """A one-line, sanitised summary safe to print to stdout."""
+    return (
+        f"{result.result_type.value}: {result.title} "
+        f"[origin={result.data_origin.value}, ref={sanitise_reference(result.source_reference)}]"
+    )
 
 
 async def _run(model: str, document_url: str | None) -> int:
@@ -51,11 +77,8 @@ async def _run(model: str, document_url: str | None) -> int:
     results = await connector.search(model, QueryType.MODEL)
     print(f"[smoke] search returned {len(results)} result(s).")  # noqa: T201
     for result in results[:10]:
-        # Non-sensitive summary only.
-        print(  # noqa: T201
-            f"  - {result.result_type.value}: {result.title} "
-            f"[origin={result.data_origin.value}, ref={result.source_reference}]"
-        )
+        # Sanitised summary only — no URLs with query strings/tokens.
+        print(f"  - {result_summary(result)}")  # noqa: T201
 
     if document_url:
         transport = connector._build_session_transport()  # noqa: SLF001 - operator tool

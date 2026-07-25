@@ -13,7 +13,10 @@ here.
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -23,6 +26,8 @@ from app.providers.errors import ProviderError, ReauthenticationRequired
 from app.providers.models import QueryType
 
 logger = logging.getLogger(__name__)
+
+_CHUNK_SIZE = 65536
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -69,16 +74,15 @@ class FixtureTransport:
         return matches
 
 
-class HttpResponse(Protocol):
+class StreamResponse(Protocol):
     status_code: int
     headers: Any
-    content: bytes
 
-    def json(self) -> Any: ...
+    def aiter_bytes(self, chunk_size: int = _CHUNK_SIZE) -> AsyncIterator[bytes]: ...
 
 
-class HttpClient(Protocol):
-    async def request(self, method: str, url: str) -> HttpResponse: ...
+class StreamingClient(Protocol):
+    def stream(self, method: str, url: str) -> AbstractAsyncContextManager[StreamResponse]: ...
 
 
 class LiveFetchError(ProviderError):
@@ -97,6 +101,14 @@ class AccessForbidden(LiveFetchError):
     """The provider returned 403 — stop and review; may indicate blocking."""
 
 
+# Raised/re-raised terminally; never caught by the transient-retry handler.
+_TERMINAL = (
+    ReauthenticationRequired,
+    AccessForbidden,
+    ResponseTooLarge,
+    HostNotAllowed,
+    LiveFetchError,
+)
 _RETRYABLE_STATUS = frozenset({500, 502, 503, 504})
 _REDIRECT_STATUS = frozenset({301, 302, 303, 307, 308})
 
@@ -104,20 +116,22 @@ _REDIRECT_STATUS = frozenset({301, 302, 303, 307, 308})
 class SessionTransport:
     """Authenticated live fetch using a bootstrapped session.
 
-    Per-request safeguards: host allowlist (redirects are never followed —
-    the client is constructed with follow_redirects=False), single-flight
-    concurrency, conservative rate limiting, bounded retries on transient
-    failures only, response/document size caps, and explicit handling of
-    401/403/429/5xx. Session expiry (401 or a login redirect) →
-    `ReauthenticationRequired` (never a bypass). 403 is treated as a hard
-    stop (possible block), not retried and not looped as reauth. The caller
-    (connector) has already validated the session and passed the live gate.
+    Genuinely streaming: response bodies are read incrementally and the
+    download is aborted the instant accumulated bytes exceed the applicable
+    cap (search 5 MB, document 100 MB), with a Content-Length pre-check when
+    present. Per-request safeguards preserved: host allowlist (redirects
+    never followed — client built with follow_redirects=False), single-
+    flight concurrency, conservative rate limiting, bounded retries on
+    transient failures only, and explicit 401/403/429/5xx handling. 401 or a
+    login redirect → `ReauthenticationRequired`; 403 → hard stop (possible
+    block, not retried, not reauth-looped). The caller has already validated
+    the session and passed the live gate.
     """
 
     def __init__(
         self,
         *,
-        client: HttpClient,
+        client: StreamingClient,
         base_url: str,
         allowed_hosts: list[str],
         rate_limiter: RateLimiter,
@@ -128,6 +142,7 @@ class SessionTransport:
         max_document_bytes: int = 100 * 1024 * 1024,
         search_path: str = "/s/global-search/{query}",
         sleep: Callable[[float], Awaitable[None]] | None = None,
+        now: Callable[[], float] = time.time,
     ) -> None:
         import asyncio
 
@@ -140,10 +155,9 @@ class SessionTransport:
         self._max_response_bytes = max_response_bytes
         self._max_document_bytes = max_document_bytes
         self._search_path = search_path
-        # Single-flight by default: cap concurrent live requests.
         self._semaphore = asyncio.Semaphore(max(1, max_concurrency))
-        # Injectable backoff sleep (tests pass a no-op).
         self._sleep = sleep or asyncio.sleep
+        self._now = now
 
     def _check_host(self, url: str) -> None:
         host = urlparse(url).hostname or ""
@@ -151,8 +165,10 @@ class SessionTransport:
             # Never disclose the attempted URL beyond its host.
             raise HostNotAllowed(f"host '{host}' is not in the Alliance allowlist")
 
-    def _retry_after_seconds(self, response: HttpResponse, attempt: int) -> float:
-        """Honour a Retry-After header (seconds), capped; else exponential."""
+    def _retry_after_seconds(self, response: StreamResponse, attempt: int) -> float:
+        """Retry-After → delay, clamped to [0, max]. Supports numeric seconds
+        and the HTTP-date form; invalid values fall back to exponential
+        backoff."""
         default = 0.5 * (2**attempt)
         try:
             raw = response.headers.get("retry-after")
@@ -160,19 +176,86 @@ class SessionTransport:
             return default
         if raw is None:
             return default
-        try:
-            return min(float(raw), self._max_retry_after)
+        raw = str(raw).strip()
+        try:  # numeric seconds
+            return max(0.0, min(float(raw), self._max_retry_after))
         except (TypeError, ValueError):
-            return default
+            pass
+        try:  # HTTP-date
+            parsed = parsedate_to_datetime(raw)
+            if parsed is not None:
+                delta = parsed.timestamp() - self._now()
+                return max(0.0, min(delta, self._max_retry_after))
+        except (TypeError, ValueError, OverflowError):
+            pass
+        return default
 
-    async def _request(self, url: str) -> HttpResponse:
+    def _is_login_redirect(self, response: StreamResponse) -> bool:
+        if response.status_code not in _REDIRECT_STATUS:
+            return False
+        try:
+            location = str(response.headers.get("location", ""))
+        except Exception:
+            return False
+        return "/login" in location.lower()
+
+    def _check_declared_size(self, response: StreamResponse, max_bytes: int) -> None:
+        try:
+            declared = response.headers.get("content-length")
+        except Exception:
+            declared = None
+        if declared is None:
+            return
+        try:
+            if int(declared) > max_bytes:
+                raise ResponseTooLarge(f"declared size exceeds {max_bytes} bytes")
+        except (TypeError, ValueError):
+            pass  # malformed header — fall back to the streaming cap
+
+    async def _read_capped(self, response: StreamResponse, max_bytes: int) -> bytes:
+        """Accumulate the body incrementally; abort the instant the cap is
+        exceeded (raising exits the `async with`, closing the stream)."""
+        buffer = bytearray()
+        async for chunk in response.aiter_bytes(_CHUNK_SIZE):
+            buffer += chunk
+            if len(buffer) > max_bytes:
+                raise ResponseTooLarge(f"streamed body exceeded {max_bytes} bytes")
+        return bytes(buffer)
+
+    async def _fetch(self, url: str, max_bytes: int) -> bytes:
+        """Fetch a URL as bounded bytes, streaming. Each attempt opens a
+        fresh stream — a consumed/aborted response is never reused."""
         self._check_host(url)
         async with self._semaphore:  # single-flight concurrency cap
             last_exc: Exception | None = None
             for attempt in range(self._max_retries + 1):
                 await self._rate_limiter.acquire()
                 try:
-                    response = await self._client.request("GET", url)
+                    async with self._client.stream("GET", url) as response:
+                        status = response.status_code
+                        if status == 401 or self._is_login_redirect(response):
+                            raise ReauthenticationRequired(
+                                "live session is no longer authenticated"
+                            )
+                        if status == 403:
+                            raise AccessForbidden(
+                                "provider returned 403 (forbidden) — stopping for review"
+                            )
+                        if status == 429:
+                            if attempt < self._max_retries:
+                                await self._sleep(self._retry_after_seconds(response, attempt))
+                                continue
+                            raise LiveFetchError("provider rate-limited (429) after retries")
+                        if status in _RETRYABLE_STATUS and attempt < self._max_retries:
+                            await self._sleep(0.5 * (2**attempt))
+                            continue
+                        if status >= 400:
+                            raise LiveFetchError(f"provider returned status {status}")
+                        # 2xx: enforce the cap before and during the read.
+                        self._check_declared_size(response, max_bytes)
+                        return await self._read_capped(response, max_bytes)
+                except _TERMINAL:
+                    raise  # never retried
                 except Exception as exc:  # transport-level (timeout, connection)
                     last_exc = exc
                     logger.warning(
@@ -183,87 +266,34 @@ class SessionTransport:
                         await self._sleep(0.5 * (2**attempt))
                         continue
                     raise LiveFetchError(f"request failed ({type(exc).__name__})") from exc
-
-                status = response.status_code
-                if status == 401 or self._is_login_redirect(response):
-                    # Session no longer authenticated — a human must re-bootstrap.
-                    raise ReauthenticationRequired("live session is no longer authenticated")
-                if status == 403:
-                    # Forbidden: do NOT retry and do NOT loop reauth — could
-                    # indicate blocking. Stop and surface for human review.
-                    raise AccessForbidden("provider returned 403 (forbidden) — stopping for review")
-                if status == 429:
-                    if attempt < self._max_retries:
-                        await self._sleep(self._retry_after_seconds(response, attempt))
-                        continue
-                    raise LiveFetchError("provider rate-limited the client (429) after retries")
-                if status in _RETRYABLE_STATUS and attempt < self._max_retries:
-                    await self._sleep(0.5 * (2**attempt))
-                    continue
-                if status >= 400:
-                    raise LiveFetchError(f"provider returned status {status}")
-                return response
         raise LiveFetchError(
             f"request failed ({type(last_exc).__name__ if last_exc else 'unknown'})"
         )
 
-    def _is_login_redirect(self, response: HttpResponse) -> bool:
-        if response.status_code not in _REDIRECT_STATUS:
-            return False
-        location = ""
-        try:
-            location = str(response.headers.get("location", ""))
-        except Exception:
-            return False
-        return "/login" in location.lower()
-
-    def _enforce_size(self, response: HttpResponse, max_bytes: int) -> None:
-        """Reject an over-cap response, early via Content-Length when present
-        and again against the actual body length."""
-        try:
-            declared = response.headers.get("content-length")
-        except Exception:
-            declared = None
-        if declared is not None:
-            try:
-                if int(declared) > max_bytes:
-                    raise ResponseTooLarge(f"declared size exceeds {max_bytes} bytes")
-            except (TypeError, ValueError):
-                pass
-        content = getattr(response, "content", b"") or b""
-        if len(content) > max_bytes:
-            raise ResponseTooLarge(f"response body exceeds {max_bytes} bytes")
-
     async def search_raw(self, query: str, query_type: QueryType) -> list[dict]:
-        """Fetch results for one query. Fetches only this query's results
-        (safeguard 8 — no crawling). The response→record mapping is confirmed
+        """Fetch results for one query (safeguard 8 — no crawling). Body is
+        streamed under the 5 MB cap; the response→record mapping is pinned
         during the operator smoke test; unrecognised shapes yield []."""
         from urllib.parse import quote
 
         url = f"{self._base_url}{self._search_path.format(query=quote(query.strip()))}"
-        response = await self._request(url)
-        self._enforce_size(response, self._max_response_bytes)
-        return self._parse_records(response)
+        body = await self._fetch(url, self._max_response_bytes)
+        return self._parse_records(body)
 
     async def fetch_document(self, url: str) -> bytes:
-        """Download a single document (e.g. a PDF) with a hard size cap.
+        """Download a single document (e.g. a PDF), streamed under the 100 MB
+        cap. Host-allowlisted; no unbounded transfer into memory; no
+        crawling."""
+        return await self._fetch(url, self._max_document_bytes)
 
-        Host-allowlisted and size-bounded so a live fetch can never pull an
-        unbounded response into memory. Duration is bounded by the client's
-        download timeout. Fetches only the requested document (no crawling)."""
-        response = await self._request(url)
-        self._enforce_size(response, self._max_document_bytes)
-        return getattr(response, "content", b"") or b""
-
-    def _parse_records(self, response: HttpResponse) -> list[dict]:
-        """Map a provider response to raw records (same shape FixtureTransport
-        yields and the connector normalises). Tolerant: returns [] on an
-        unrecognised body. The exact field paths are pinned against a
-        captured, sanitised fixture during the smoke test."""
+    def _parse_records(self, body: bytes) -> list[dict]:
+        """Map a provider response body to raw records (same shape
+        FixtureTransport yields). Tolerant: [] on an unrecognised body; the
+        exact field paths are pinned against a sanitised fixture."""
         try:
-            body = response.json()
-        except Exception:
+            data = json.loads(body)
+        except (ValueError, UnicodeDecodeError):
             logger.warning("alliance live response was not JSON")
             return []
-        records = body.get("records") if isinstance(body, dict) else None
+        records = data.get("records") if isinstance(data, dict) else None
         return records if isinstance(records, list) else []

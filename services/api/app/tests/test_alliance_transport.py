@@ -1,6 +1,8 @@
-"""SessionTransport mechanics — mocked HTTP client only, no live requests."""
+"""SessionTransport mechanics — mocked streaming client only, no live requests."""
 
 import asyncio
+from collections.abc import AsyncIterator
+from email.utils import formatdate
 
 import pytest
 
@@ -18,20 +20,20 @@ from app.providers.models import QueryType
 ALLOWED = ["portal.alliancels.net"]
 
 
-class FakeResponse:
+class FakeStreamResponse:
     def __init__(
         self,
         status_code: int,
         *,
-        body: object = None,
+        chunks: list[bytes] | None = None,
         location: str = "",
-        content: bytes = b"",
         content_length: int | None = None,
         retry_after: str | None = None,
     ) -> None:
         self.status_code = status_code
-        self._body = body if body is not None else {"records": []}
-        self.content = content
+        self._chunks = chunks if chunks is not None else [b'{"records": []}']
+        self.chunks_yielded = 0
+        self.closed = False
         self.headers: dict[str, str] = {}
         if location:
             self.headers["location"] = location
@@ -40,35 +42,47 @@ class FakeResponse:
         if retry_after is not None:
             self.headers["retry-after"] = retry_after
 
-    def json(self) -> object:
-        return self._body
+    async def aiter_bytes(self, chunk_size: int = 65536) -> AsyncIterator[bytes]:
+        for chunk in self._chunks:
+            self.chunks_yielded += 1
+            yield chunk
 
 
-class FakeClient:
-    """Records requests and returns queued responses (or raises)."""
+class _StreamCtx:
+    def __init__(self, result) -> None:
+        self._result = result
 
-    def __init__(self, responses: list) -> None:
-        self._responses = list(responses)
+    async def __aenter__(self):
+        if isinstance(self._result, Exception):
+            raise self._result
+        return self._result
+
+    async def __aexit__(self, *exc) -> bool:
+        if not isinstance(self._result, Exception):
+            self._result.closed = True
+        return False
+
+
+class FakeStreamClient:
+    def __init__(self, results: list) -> None:
+        self._results = list(results)
         self.requests: list[str] = []
 
-    async def request(self, method: str, url: str):
+    def stream(self, method: str, url: str) -> _StreamCtx:
         self.requests.append(url)
-        result = self._responses.pop(0)
-        if isinstance(result, Exception):
-            raise result
-        return result
+        return _StreamCtx(self._results.pop(0))
 
 
 async def _no_sleep(_seconds: float) -> None:
     return None
 
 
-def _transport(client: FakeClient, **kwargs) -> SessionTransport:
+def _transport(client: FakeStreamClient, **kwargs) -> SessionTransport:
     return SessionTransport(
         client=client,
         base_url="https://portal.alliancels.net",
         allowed_hosts=ALLOWED,
-        rate_limiter=RateLimiter(0, sleep=_no_sleep),  # 0 → no delay in tests
+        rate_limiter=RateLimiter(0, sleep=_no_sleep),
         sleep=_no_sleep,
         **kwargs,
     )
@@ -76,14 +90,14 @@ def _transport(client: FakeClient, **kwargs) -> SessionTransport:
 
 async def test_successful_fetch_returns_records() -> None:
     records = [{"source_reference": "ALS-SC60-SVC", "title": "SC60 Service Manual"}]
-    client = FakeClient([FakeResponse(200, body={"records": records})])
-    transport = _transport(client)
-    assert await transport.search_raw("SC60", QueryType.AUTO) == records
-    assert len(client.requests) == 1  # fetches only the requested query
+    body = b'{"records": [{"source_reference": "ALS-SC60-SVC", "title": "SC60 Service Manual"}]}'
+    client = FakeStreamClient([FakeStreamResponse(200, chunks=[body])])
+    assert await _transport(client).search_raw("SC60", QueryType.AUTO) == records
+    assert len(client.requests) == 1
 
 
 async def test_only_portal_host_is_fetched() -> None:
-    client = FakeClient([FakeResponse(200)])
+    client = FakeStreamClient([FakeStreamResponse(200)])
     await _transport(client).search_raw("SC60", QueryType.AUTO)
     from urllib.parse import urlparse
 
@@ -91,7 +105,7 @@ async def test_only_portal_host_is_fetched() -> None:
 
 
 async def test_off_allowlist_host_is_refused() -> None:
-    client = FakeClient([FakeResponse(200)])
+    client = FakeStreamClient([FakeStreamResponse(200)])
     transport = SessionTransport(
         client=client,
         base_url="https://evil.example.com",
@@ -100,134 +114,188 @@ async def test_off_allowlist_host_is_refused() -> None:
     )
     with pytest.raises(HostNotAllowed):
         await transport.search_raw("SC60", QueryType.AUTO)
-    assert client.requests == []  # never attempted
+    assert client.requests == []
 
 
 async def test_401_raises_reauthentication_required() -> None:
-    client = FakeClient([FakeResponse(401)])
+    client = FakeStreamClient([FakeStreamResponse(401)])
     with pytest.raises(ReauthenticationRequired):
         await _transport(client).search_raw("SC60", QueryType.AUTO)
 
 
 async def test_login_redirect_raises_reauthentication_required() -> None:
-    client = FakeClient([FakeResponse(302, location="https://portal.alliancels.net/s/login/")])
+    client = FakeStreamClient(
+        [FakeStreamResponse(302, location="https://portal.alliancels.net/s/login/")]
+    )
     with pytest.raises(ReauthenticationRequired):
         await _transport(client).search_raw("SC60", QueryType.AUTO)
 
 
 async def test_403_is_hard_stop_not_retried_not_reauth() -> None:
-    client = FakeClient([FakeResponse(403), FakeResponse(200)])
+    client = FakeStreamClient([FakeStreamResponse(403), FakeStreamResponse(200)])
     with pytest.raises(AccessForbidden):
         await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO)
-    assert len(client.requests) == 1  # no retry, no reauth loop
+    assert len(client.requests) == 1
 
 
 async def test_429_is_retried_then_succeeds() -> None:
-    client = FakeClient(
-        [FakeResponse(429, retry_after="0"), FakeResponse(200, body={"records": []})]
-    )
+    client = FakeStreamClient([FakeStreamResponse(429, retry_after="0"), FakeStreamResponse(200)])
     assert await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO) == []
-    assert len(client.requests) == 2
+    assert len(client.requests) == 2  # fresh stream per attempt, no reuse
 
 
 async def test_429_exhausted_raises_live_fetch_error() -> None:
-    client = FakeClient([FakeResponse(429), FakeResponse(429), FakeResponse(429)])
+    client = FakeStreamClient(
+        [FakeStreamResponse(429), FakeStreamResponse(429), FakeStreamResponse(429)]
+    )
     with pytest.raises(LiveFetchError, match="429"):
         await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO)
     assert len(client.requests) == 3
 
 
-async def test_retry_after_header_is_capped() -> None:
-    captured: list[float] = []
-
-    async def _record_sleep(seconds: float) -> None:
-        captured.append(seconds)
-
-    client = FakeClient([FakeResponse(429, retry_after="9999"), FakeResponse(200)])
-    transport = SessionTransport(
-        client=client,
-        base_url="https://portal.alliancels.net",
-        allowed_hosts=ALLOWED,
-        rate_limiter=RateLimiter(0, sleep=_no_sleep),
-        sleep=_record_sleep,
-        max_retry_after_seconds=60.0,
-    )
-    await transport.search_raw("SC60", QueryType.AUTO)
-    assert captured == [60.0]  # 9999 capped to the configured max
-
-
 async def test_transient_5xx_is_retried_then_succeeds() -> None:
-    client = FakeClient([FakeResponse(503), FakeResponse(200, body={"records": []})])
+    client = FakeStreamClient([FakeStreamResponse(503), FakeStreamResponse(200)])
     assert await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO) == []
     assert len(client.requests) == 2
 
 
 async def test_timeout_error_is_retried_then_raises_live_fetch_error() -> None:
-    client = FakeClient([TimeoutError(), TimeoutError(), TimeoutError()])
+    client = FakeStreamClient([TimeoutError(), TimeoutError(), TimeoutError()])
     with pytest.raises(LiveFetchError):
         await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO)
     assert len(client.requests) == 3
 
 
-async def test_unrecognised_body_yields_empty_records() -> None:
-    client = FakeClient([FakeResponse(200, body={"unexpected": "shape"})])
-    assert await _transport(client).search_raw("SC60", QueryType.AUTO) == []
-
-
 async def test_other_4xx_raises_live_fetch_error() -> None:
-    client = FakeClient([FakeResponse(400)])
+    client = FakeStreamClient([FakeStreamResponse(400)])
     with pytest.raises(LiveFetchError):
         await _transport(client).search_raw("SC60", QueryType.AUTO)
 
 
-async def test_search_response_over_cap_is_rejected() -> None:
-    client = FakeClient([FakeResponse(200, content_length=10_000_000)])
-    with pytest.raises(ResponseTooLarge):
-        await _transport(client, max_response_bytes=1000).search_raw("SC60", QueryType.AUTO)
+async def test_unrecognised_body_yields_empty_records() -> None:
+    client = FakeStreamClient([FakeStreamResponse(200, chunks=[b'{"unexpected": 1}'])])
+    assert await _transport(client).search_raw("SC60", QueryType.AUTO) == []
+
+
+class TestStreamingSizeCaps:
+    async def test_content_length_precheck_stops_before_reading(self) -> None:
+        # Declared 10 MB, cap 1000 → reject WITHOUT reading any chunk.
+        response = FakeStreamResponse(200, content_length=10_000_000, chunks=[b"x" * 100])
+        client = FakeStreamClient([response])
+        with pytest.raises(ResponseTooLarge):
+            await _transport(client, max_response_bytes=1000).search_raw("SC60", QueryType.AUTO)
+        assert response.chunks_yielded == 0  # never started reading the body
+        assert response.closed is True
+
+    async def test_streaming_stops_once_limit_exceeded_no_content_length(self) -> None:
+        # No Content-Length; 10×1 MB chunks, cap 5 MB → stop mid-stream.
+        chunks = [b"x" * 1_000_000 for _ in range(10)]
+        response = FakeStreamResponse(200, chunks=chunks)
+        client = FakeStreamClient([response])
+        with pytest.raises(ResponseTooLarge):
+            await _transport(client, max_response_bytes=5_000_000).search_raw(
+                "SC60", QueryType.AUTO
+            )
+        # Read stopped early — did NOT consume all 10 chunks — and closed.
+        assert 0 < response.chunks_yielded < 10
+        assert response.closed is True
+
+    async def test_document_streaming_cap_enforced(self) -> None:
+        chunks = [b"x" * 1_000_000 for _ in range(10)]
+        response = FakeStreamResponse(200, chunks=chunks)
+        client = FakeStreamClient([response])
+        transport = _transport(client, max_document_bytes=3_000_000)
+        with pytest.raises(ResponseTooLarge):
+            await transport.fetch_document("https://portal.alliancels.net/s/document/x")
+        assert 0 < response.chunks_yielded < 10
 
 
 class TestFetchDocument:
     async def test_download_returns_bytes(self) -> None:
         pdf = b"%PDF-1.4 ...bytes..."
-        client = FakeClient([FakeResponse(200, content=pdf)])
-        transport = _transport(client)
+        client = FakeStreamClient([FakeStreamResponse(200, chunks=[pdf])])
         url = "https://portal.alliancels.net/s/document/ALS-SC60-SVC"
-        assert await transport.fetch_document(url) == pdf
+        assert await _transport(client).fetch_document(url) == pdf
 
     async def test_download_host_allowlisted(self) -> None:
-        client = FakeClient([FakeResponse(200, content=b"x")])
+        client = FakeStreamClient([FakeStreamResponse(200, chunks=[b"x"])])
         with pytest.raises(HostNotAllowed):
             await _transport(client).fetch_document("https://cdn.evil.example/x.pdf")
         assert client.requests == []
 
-    async def test_download_over_cap_rejected_by_content_length(self) -> None:
-        client = FakeClient([FakeResponse(200, content_length=200_000_000)])
-        transport = _transport(client, max_document_bytes=100_000_000)
-        with pytest.raises(ResponseTooLarge):
-            await transport.fetch_document("https://portal.alliancels.net/s/document/x")
 
-    async def test_download_over_cap_rejected_by_actual_bytes(self) -> None:
-        client = FakeClient([FakeResponse(200, content=b"x" * 2000)])
-        transport = _transport(client, max_document_bytes=1000)
-        with pytest.raises(ResponseTooLarge):
-            await transport.fetch_document("https://portal.alliancels.net/s/document/x")
+class TestRetryAfterParsing:
+    def _t(self, **kwargs) -> SessionTransport:
+        return _transport(FakeStreamClient([]), **kwargs)
+
+    def test_numeric_seconds_within_range(self) -> None:
+        transport = self._t(max_retry_after_seconds=60)
+        assert transport._retry_after_seconds(FakeStreamResponse(429, retry_after="5"), 0) == 5.0
+
+    def test_negative_clamped_to_zero(self) -> None:
+        transport = self._t(max_retry_after_seconds=60)
+        assert transport._retry_after_seconds(FakeStreamResponse(429, retry_after="-5"), 0) == 0.0
+
+    def test_oversized_clamped_to_max(self) -> None:
+        transport = self._t(max_retry_after_seconds=60)
+        assert (
+            transport._retry_after_seconds(FakeStreamResponse(429, retry_after="9999"), 0) == 60.0
+        )
+
+    def test_invalid_falls_back_to_exponential_backoff(self) -> None:
+        transport = self._t()
+        # attempt 1 → 0.5 * 2**1 = 1.0
+        assert transport._retry_after_seconds(FakeStreamResponse(429, retry_after="soon"), 1) == 1.0
+
+    def test_http_date_form_supported(self) -> None:
+        fixed_now = 1_000_000.0
+        transport = SessionTransport(
+            client=FakeStreamClient([]),
+            base_url="https://portal.alliancels.net",
+            allowed_hosts=ALLOWED,
+            rate_limiter=RateLimiter(0, sleep=_no_sleep),
+            sleep=_no_sleep,
+            now=lambda: fixed_now,
+            max_retry_after_seconds=60,
+        )
+        http_date = formatdate(fixed_now + 30, usegmt=True)  # 30s in the future
+        delay = transport._retry_after_seconds(FakeStreamResponse(429, retry_after=http_date), 0)
+        assert abs(delay - 30.0) < 2.0
+
+    def test_http_date_in_past_clamped_to_zero(self) -> None:
+        fixed_now = 1_000_000.0
+        transport = SessionTransport(
+            client=FakeStreamClient([]),
+            base_url="https://portal.alliancels.net",
+            allowed_hosts=ALLOWED,
+            rate_limiter=RateLimiter(0, sleep=_no_sleep),
+            sleep=_no_sleep,
+            now=lambda: fixed_now,
+        )
+        http_date = formatdate(fixed_now - 100, usegmt=True)
+        assert (
+            transport._retry_after_seconds(FakeStreamResponse(429, retry_after=http_date), 0) == 0.0
+        )
 
 
 async def test_single_flight_concurrency_is_enforced() -> None:
-    """With max_concurrency=1 the client sees at most one in-flight request."""
     in_flight = 0
     max_in_flight = 0
 
-    class ConcurrencyClient:
-        requests: list[str] = []
-
-        async def request(self, method: str, url: str):
+    class ConcurrencyResponse(FakeStreamResponse):
+        async def aiter_bytes(self, chunk_size: int = 65536):
             nonlocal in_flight, max_in_flight
             in_flight += 1
             max_in_flight = max(max_in_flight, in_flight)
             await asyncio.sleep(0.02)  # hold the slot so overlap would show
             in_flight -= 1
-            return FakeResponse(200, body={"records": []})
+            yield b'{"records": []}'
+
+    class ConcurrencyClient:
+        requests: list[str] = []
+
+        def stream(self, method: str, url: str) -> _StreamCtx:
+            return _StreamCtx(ConcurrencyResponse(200))
 
     transport = SessionTransport(
         client=ConcurrencyClient(),
