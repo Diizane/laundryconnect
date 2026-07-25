@@ -90,7 +90,15 @@ class LiveFetchError(ProviderError):
 
 
 class HostNotAllowed(ProviderError):
-    """A URL outside the configured host allowlist was attempted."""
+    """A URL whose host is outside the configured allowlist was attempted."""
+
+
+class InvalidProviderURL(ProviderError):
+    """A URL violated the scheme/userinfo/port policy for live requests."""
+
+
+class UnexpectedRedirect(ProviderError):
+    """A non-login 3xx redirect was refused (never followed)."""
 
 
 class ResponseTooLarge(LiveFetchError):
@@ -107,6 +115,8 @@ _TERMINAL = (
     AccessForbidden,
     ResponseTooLarge,
     HostNotAllowed,
+    InvalidProviderURL,
+    UnexpectedRedirect,
     LiveFetchError,
 )
 _RETRYABLE_STATUS = frozenset({500, 502, 503, 504})
@@ -159,11 +169,35 @@ class SessionTransport:
         self._sleep = sleep or asyncio.sleep
         self._now = now
 
-    def _check_host(self, url: str) -> None:
-        host = urlparse(url).hostname or ""
+    def _check_url(self, url: str) -> None:
+        """Enforce the live-URL policy before opening a stream: https only,
+        exact allowlisted host, no userinfo, and no explicit port other than
+        443. Error messages never include the full URL."""
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            raise InvalidProviderURL("live URL scheme must be https")
+        if parsed.username or parsed.password:
+            raise InvalidProviderURL("live URL must not contain userinfo")
+        host = parsed.hostname or ""
         if host not in self._allowed_hosts:
             # Never disclose the attempted URL beyond its host.
             raise HostNotAllowed(f"host '{host}' is not in the Alliance allowlist")
+        try:
+            port = parsed.port
+        except ValueError:
+            raise InvalidProviderURL("live URL has an invalid port") from None
+        if port is not None and port != 443:
+            raise InvalidProviderURL("live URL explicit port must be 443")
+
+    def _sanitise_location(self, response: StreamResponse) -> tuple[str, str]:
+        """Return (host, path) of a Location header — never query/fragment/
+        userinfo, so redirect diagnostics leak nothing sensitive."""
+        try:
+            location = str(response.headers.get("location", ""))
+        except Exception:
+            return ("", "")
+        parts = urlparse(location)
+        return (parts.hostname or "", parts.path or "")
 
     def _retry_after_seconds(self, response: StreamResponse, attempt: int) -> float:
         """Retry-After → delay, clamped to [0, max]. Supports numeric seconds
@@ -225,7 +259,7 @@ class SessionTransport:
     async def _fetch(self, url: str, max_bytes: int) -> bytes:
         """Fetch a URL as bounded bytes, streaming. Each attempt opens a
         fresh stream — a consumed/aborted response is never reused."""
-        self._check_host(url)
+        self._check_url(url)
         async with self._semaphore:  # single-flight concurrency cap
             last_exc: Exception | None = None
             for attempt in range(self._max_retries + 1):
@@ -233,9 +267,25 @@ class SessionTransport:
                 try:
                     async with self._client.stream("GET", url) as response:
                         status = response.status_code
-                        if status == 401 or self._is_login_redirect(response):
+                        if status == 401:
                             raise ReauthenticationRequired(
                                 "live session is no longer authenticated"
+                            )
+                        if status in _REDIRECT_STATUS:
+                            # Never follow, read, or retry a redirect. Login
+                            # redirects mean the session expired; any other
+                            # 3xx is a terminal refusal (off-host or not).
+                            if self._is_login_redirect(response):
+                                raise ReauthenticationRequired(
+                                    "live session is no longer authenticated"
+                                )
+                            dest_host, dest_path = self._sanitise_location(response)
+                            if dest_host and dest_host not in self._allowed_hosts:
+                                raise UnexpectedRedirect(
+                                    f"refused off-host redirect to {dest_host}{dest_path}"
+                                )
+                            raise UnexpectedRedirect(
+                                f"refused unexpected redirect to {dest_host}{dest_path}"
                             )
                         if status == 403:
                             raise AccessForbidden(

@@ -10,9 +10,11 @@ from app.providers.alliance.ratelimit import RateLimiter
 from app.providers.alliance.transport import (
     AccessForbidden,
     HostNotAllowed,
+    InvalidProviderURL,
     LiveFetchError,
     ResponseTooLarge,
     SessionTransport,
+    UnexpectedRedirect,
 )
 from app.providers.errors import ReauthenticationRequired
 from app.providers.models import QueryType
@@ -124,11 +126,95 @@ async def test_401_raises_reauthentication_required() -> None:
 
 
 async def test_login_redirect_raises_reauthentication_required() -> None:
-    client = FakeStreamClient(
-        [FakeStreamResponse(302, location="https://portal.alliancels.net/s/login/")]
-    )
+    response = FakeStreamResponse(302, location="https://portal.alliancels.net/s/login/")
+    client = FakeStreamClient([response])
     with pytest.raises(ReauthenticationRequired):
         await _transport(client).search_raw("SC60", QueryType.AUTO)
+    assert response.chunks_yielded == 0  # redirect body never read
+    assert len(client.requests) == 1
+
+
+class TestUrlPolicy:
+    """Every live URL must be https, exact-host, no userinfo, port 443 only —
+    rejected before any stream is opened."""
+
+    def _base(self, base_url: str, client: FakeStreamClient) -> SessionTransport:
+        return SessionTransport(
+            client=client,
+            base_url=base_url,
+            allowed_hosts=ALLOWED,
+            rate_limiter=RateLimiter(0, sleep=_no_sleep),
+            sleep=_no_sleep,
+        )
+
+    async def test_http_scheme_rejected(self) -> None:
+        client = FakeStreamClient([])
+        with pytest.raises(InvalidProviderURL):
+            await self._base("http://portal.alliancels.net", client).search_raw(
+                "SC60", QueryType.AUTO
+            )
+        assert client.requests == []  # stream never opened
+
+    async def test_userinfo_rejected(self) -> None:
+        client = FakeStreamClient([])
+        with pytest.raises(InvalidProviderURL):
+            await self._base("https://user:password@portal.alliancels.net", client).search_raw(
+                "SC60", QueryType.AUTO
+            )
+        assert client.requests == []
+
+    async def test_non_443_port_rejected(self) -> None:
+        client = FakeStreamClient([])
+        with pytest.raises(InvalidProviderURL):
+            await self._base("https://portal.alliancels.net:444", client).search_raw(
+                "SC60", QueryType.AUTO
+            )
+        assert client.requests == []
+
+    async def test_off_allowlist_host_rejected(self) -> None:
+        client = FakeStreamClient([])
+        with pytest.raises(HostNotAllowed):
+            await self._base("https://evil.example", client).search_raw("SC60", QueryType.AUTO)
+        assert client.requests == []
+
+    async def test_plain_https_portal_accepted(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(200)])
+        assert (
+            await self._base("https://portal.alliancels.net", client).search_raw(
+                "SC60", QueryType.AUTO
+            )
+            == []
+        )
+        assert len(client.requests) == 1
+
+    async def test_explicit_port_443_accepted(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(200)])
+        await self._base("https://portal.alliancels.net:443", client).search_raw(
+            "SC60", QueryType.AUTO
+        )
+        assert len(client.requests) == 1
+
+
+class TestUnexpectedRedirects:
+    async def test_same_host_non_login_redirect_is_terminal(self) -> None:
+        response = FakeStreamResponse(302, location="https://portal.alliancels.net/s/elsewhere")
+        client = FakeStreamClient([response, FakeStreamResponse(200)])
+        with pytest.raises(UnexpectedRedirect):
+            await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO)
+        assert response.chunks_yielded == 0  # body not consumed
+        assert len(client.requests) == 1  # not retried, no second request
+
+    async def test_off_host_redirect_is_refused_terminally(self) -> None:
+        response = FakeStreamResponse(302, location="https://evil.example/x?token=SECRETVALUE")
+        client = FakeStreamClient([response, FakeStreamResponse(200)])
+        with pytest.raises(UnexpectedRedirect) as excinfo:
+            await _transport(client, max_retries=2).search_raw("SC60", QueryType.AUTO)
+        message = str(excinfo.value)
+        assert "off-host" in message
+        assert "evil.example" in message
+        assert "SECRETVALUE" not in message  # no query params leaked
+        assert response.chunks_yielded == 0
+        assert len(client.requests) == 1
 
 
 async def test_403_is_hard_stop_not_retried_not_reauth() -> None:

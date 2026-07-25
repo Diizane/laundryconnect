@@ -117,3 +117,23 @@ against a mocked client (no live request):
 
 Unchanged: `alliance_access_approved` stays false by default; no live
 request has been made.
+
+## Addendum (2026-07-24, #2) — URL policy and redirect hardening
+
+- **Full URL policy before opening a stream** (`_check_url`): scheme must be
+  exactly `https`; hostname must exactly match the allowlist; no userinfo
+  (username/password); an explicit port, if present, must be 443. Violations
+  raise a terminal `InvalidProviderURL` / `HostNotAllowed` (never retried),
+  with no full URL in the message. Verified rejected — without opening a
+  stream — for `http://`, `user:password@…`, `…:444`, and off-allowlist
+  hosts; plain HTTPS and explicit `:443` accepted.
+- **Every non-login 3xx is terminal** (`UnexpectedRedirect`): the body is
+  not read, the redirect is not followed, and it is not retried. Login
+  redirects still map to `ReauthenticationRequired`. Off-host redirects are
+  called out as refused. Diagnostics include only a sanitised destination
+  host/path — never query parameters, fragments, or userinfo. Verified:
+  redirect bodies are never consumed and exactly one request is attempted.
+
+Streaming size caps are genuine (incremental read, early abort, fresh stream
+per retry); Retry-After parsing is clamped and supports the HTTP-date form.
+Still: no live request; `alliance_access_approved` false by default.
