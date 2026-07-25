@@ -148,6 +148,27 @@ automated access are behind the login and remain unreviewed.
 5. Is written permission from an Alliance representative obtainable? (The
    strongest position; recommended.)
 
+## First supervised validation (2026-07-25)
+
+The operator ran one approved, search-only smoke test. Result: the
+bootstrapped session **authenticated successfully**, the request completed
+(`200 OK`), and every transport safeguard held with **no error**. The
+guessed portal path returned HTML (the search-page shell), not data.
+
+Correction from the business owner: the authenticated parts/model search is
+on the **Parts Connection host** `pc.alliancels.net`, e.g.
+`GET https://pc.alliancels.net/en/Search/StartsWith?searchString=SC60&x.Show=Assembly`.
+This host is part of the same authorised service-partner access. It is now:
+
+- added to the host allowlist (alongside `portal.alliancels.net`);
+- the configured search URL (`ALLIANCE_SEARCH_URL`);
+- captured during bootstrap (the operator visits it in the logged-in
+  browser so its cookies are saved).
+
+Still pending before results parse: the real response content type and
+structure, captured via `--dump-raw` and sanitised, to pin `_parse_records`.
+No document retrieval attempted. `alliance_access_approved` remains false.
+
 ## Verified business-owner information (2026-07-24)
 
 Supplied by the business account owner; the basis for the reclassification:

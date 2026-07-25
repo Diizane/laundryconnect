@@ -29,8 +29,10 @@ from app.providers.alliance.session import secure_session_file
 logger = logging.getLogger(__name__)
 
 _LOGIN_URL = "https://portal.alliancels.net/s/login/"
-# The operator is done once the URL leaves the login page; they also press
-# Enter in the terminal to confirm, so we never scrape or auto-detect auth.
+# Parts Connection: authenticated search/parts host. Visiting it in the same
+# logged-in context captures its cookies into the saved session so the
+# connector can reach it. The operator confirms it loaded before saving.
+_PARTS_URL = "https://pc.alliancels.net/en/Search/StartsWith?searchString=SC60&x.Show=Assembly"
 
 
 def bootstrap(session_path: str) -> None:
@@ -47,7 +49,7 @@ def bootstrap(session_path: str) -> None:
 
     print(  # noqa: T201 - operator UX, prints no sensitive data
         "Opening a browser. Log in manually and complete any MFA/CAPTCHA, "
-        "then return here and press Enter to save the session."
+        "then return here and press Enter."
     )
     with sync_playwright() as playwright:  # pragma: no cover - requires a browser + human
         browser = playwright.chromium.launch(headless=False)
@@ -55,8 +57,14 @@ def bootstrap(session_path: str) -> None:
         page = context.new_page()
         page.goto(_LOGIN_URL)
         input("Press Enter once you have finished logging in… ")
-        # storage_state writes cookies/localStorage to disk; we never read or
-        # print its contents here.
+        # Visit Parts Connection so its cookies are captured too. If it shows
+        # a search page you are authenticated there; if it asks you to log in,
+        # do so, then continue.
+        print("Opening Parts Connection to capture its session…")  # noqa: T201
+        page.goto(_PARTS_URL)
+        input("Press Enter once the Parts Connection page has loaded… ")
+        # storage_state writes cookies/localStorage for ALL visited hosts to
+        # disk; we never read or print its contents here.
         context.storage_state(path=str(target))
         browser.close()
 

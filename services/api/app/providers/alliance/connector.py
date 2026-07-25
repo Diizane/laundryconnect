@@ -116,7 +116,6 @@ class AllianceConnector(ProviderConnector):
         )
         return SessionTransport(
             client=client,
-            base_url=self._settings.alliance_base_url,
             allowed_hosts=self._settings.alliance_allowed_host_list,
             rate_limiter=RateLimiter(self._settings.alliance_rate_limit_per_minute),
             max_retries=self._settings.alliance_max_retries,
@@ -124,6 +123,7 @@ class AllianceConnector(ProviderConnector):
             max_retry_after_seconds=self._settings.alliance_max_retry_after_seconds,
             max_response_bytes=self._settings.alliance_max_response_bytes,
             max_document_bytes=self._settings.alliance_max_document_bytes,
+            search_url_template=self._settings.alliance_search_url,
         )
 
     def _normalise(self, record: dict) -> ProviderResult:

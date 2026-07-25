@@ -80,9 +80,9 @@ async def _no_sleep(_seconds: float) -> None:
 
 
 def _transport(client: FakeStreamClient, **kwargs) -> SessionTransport:
+    kwargs.setdefault("search_url_template", "https://portal.alliancels.net/en/Search/{query}")
     return SessionTransport(
         client=client,
-        base_url="https://portal.alliancels.net",
         allowed_hosts=ALLOWED,
         rate_limiter=RateLimiter(0, sleep=_no_sleep),
         sleep=_no_sleep,
@@ -110,13 +110,33 @@ async def test_off_allowlist_host_is_refused() -> None:
     client = FakeStreamClient([FakeStreamResponse(200)])
     transport = SessionTransport(
         client=client,
-        base_url="https://evil.example.com",
+        search_url_template="https://evil.example.com/{query}",
         allowed_hosts=ALLOWED,
         rate_limiter=RateLimiter(0),
     )
     with pytest.raises(HostNotAllowed):
         await transport.search_raw("SC60", QueryType.AUTO)
     assert client.requests == []
+
+
+async def test_parts_connection_host_allowed_and_query_encoded() -> None:
+    client = FakeStreamClient([FakeStreamResponse(200)])
+    transport = SessionTransport(
+        client=client,
+        search_url_template=(
+            "https://pc.alliancels.net/en/Search/StartsWith?searchString={query}&x.Show=Assembly"
+        ),
+        allowed_hosts=["portal.alliancels.net", "pc.alliancels.net"],
+        rate_limiter=RateLimiter(0, sleep=_no_sleep),
+        sleep=_no_sleep,
+    )
+    await transport.search_raw("SC 60/A", QueryType.AUTO)
+    from urllib.parse import urlparse
+
+    fetched = client.requests[0]
+    assert urlparse(fetched).hostname == "pc.alliancels.net"
+    assert "searchString=SC%2060%2FA" in fetched  # query URL-encoded
+    assert "x.Show=Assembly" in fetched
 
 
 async def test_401_raises_reauthentication_required() -> None:
@@ -138,10 +158,10 @@ class TestUrlPolicy:
     """Every live URL must be https, exact-host, no userinfo, port 443 only —
     rejected before any stream is opened."""
 
-    def _base(self, base_url: str, client: FakeStreamClient) -> SessionTransport:
+    def _tmpl(self, template: str, client: FakeStreamClient) -> SessionTransport:
         return SessionTransport(
             client=client,
-            base_url=base_url,
+            search_url_template=template,
             allowed_hosts=ALLOWED,
             rate_limiter=RateLimiter(0, sleep=_no_sleep),
             sleep=_no_sleep,
@@ -150,7 +170,7 @@ class TestUrlPolicy:
     async def test_http_scheme_rejected(self) -> None:
         client = FakeStreamClient([])
         with pytest.raises(InvalidProviderURL):
-            await self._base("http://portal.alliancels.net", client).search_raw(
+            await self._tmpl("http://portal.alliancels.net/s/{query}", client).search_raw(
                 "SC60", QueryType.AUTO
             )
         assert client.requests == []  # stream never opened
@@ -158,15 +178,15 @@ class TestUrlPolicy:
     async def test_userinfo_rejected(self) -> None:
         client = FakeStreamClient([])
         with pytest.raises(InvalidProviderURL):
-            await self._base("https://user:password@portal.alliancels.net", client).search_raw(
-                "SC60", QueryType.AUTO
-            )
+            await self._tmpl(
+                "https://user:password@portal.alliancels.net/s/{query}", client
+            ).search_raw("SC60", QueryType.AUTO)
         assert client.requests == []
 
     async def test_non_443_port_rejected(self) -> None:
         client = FakeStreamClient([])
         with pytest.raises(InvalidProviderURL):
-            await self._base("https://portal.alliancels.net:444", client).search_raw(
+            await self._tmpl("https://portal.alliancels.net:444/s/{query}", client).search_raw(
                 "SC60", QueryType.AUTO
             )
         assert client.requests == []
@@ -174,13 +194,15 @@ class TestUrlPolicy:
     async def test_off_allowlist_host_rejected(self) -> None:
         client = FakeStreamClient([])
         with pytest.raises(HostNotAllowed):
-            await self._base("https://evil.example", client).search_raw("SC60", QueryType.AUTO)
+            await self._tmpl("https://evil.example/{query}", client).search_raw(
+                "SC60", QueryType.AUTO
+            )
         assert client.requests == []
 
     async def test_plain_https_portal_accepted(self) -> None:
         client = FakeStreamClient([FakeStreamResponse(200)])
         assert (
-            await self._base("https://portal.alliancels.net", client).search_raw(
+            await self._tmpl("https://portal.alliancels.net/s/{query}", client).search_raw(
                 "SC60", QueryType.AUTO
             )
             == []
@@ -189,7 +211,7 @@ class TestUrlPolicy:
 
     async def test_explicit_port_443_accepted(self) -> None:
         client = FakeStreamClient([FakeStreamResponse(200)])
-        await self._base("https://portal.alliancels.net:443", client).search_raw(
+        await self._tmpl("https://portal.alliancels.net:443/s/{query}", client).search_raw(
             "SC60", QueryType.AUTO
         )
         assert len(client.requests) == 1
@@ -337,7 +359,7 @@ class TestRetryAfterParsing:
         fixed_now = 1_000_000.0
         transport = SessionTransport(
             client=FakeStreamClient([]),
-            base_url="https://portal.alliancels.net",
+            search_url_template="https://portal.alliancels.net/s/{query}",
             allowed_hosts=ALLOWED,
             rate_limiter=RateLimiter(0, sleep=_no_sleep),
             sleep=_no_sleep,
@@ -352,7 +374,7 @@ class TestRetryAfterParsing:
         fixed_now = 1_000_000.0
         transport = SessionTransport(
             client=FakeStreamClient([]),
-            base_url="https://portal.alliancels.net",
+            search_url_template="https://portal.alliancels.net/s/{query}",
             allowed_hosts=ALLOWED,
             rate_limiter=RateLimiter(0, sleep=_no_sleep),
             sleep=_no_sleep,
@@ -385,7 +407,7 @@ async def test_single_flight_concurrency_is_enforced() -> None:
 
     transport = SessionTransport(
         client=ConcurrencyClient(),
-        base_url="https://portal.alliancels.net",
+        search_url_template="https://portal.alliancels.net/s/{query}",
         allowed_hosts=ALLOWED,
         rate_limiter=RateLimiter(0, sleep=_no_sleep),
         sleep=_no_sleep,
