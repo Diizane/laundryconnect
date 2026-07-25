@@ -36,6 +36,13 @@ def test_json_formatter_includes_request_id() -> None:
     assert payload["request_id"] == "req-123"
 
 
+def test_httpx_request_logging_is_quieted() -> None:
+    from app.core.logging import configure_logging
+
+    configure_logging("INFO")
+    assert logging.getLogger("httpx").level == logging.WARNING
+
+
 def test_sensitive_extras_are_redacted() -> None:
     payload = _format_record(
         provider_password="hunter2",

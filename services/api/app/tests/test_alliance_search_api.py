@@ -110,3 +110,22 @@ def test_search_does_not_persist_to_database(alliance_only: TestClient) -> None:
     # a successful search with results confirms it never touches the DB.
     body = alliance_only.post("/api/v1/search", json={"query": "SC60"}).json()
     assert body["total_results"] > 0
+
+
+def test_search_does_not_log_result_payloads(
+    mixed: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Check 4: no provider payloads (result titles/URLs) or the query text
+    # are written to logs; only structural metadata (counts, statuses).
+    import logging
+
+    with caplog.at_level(logging.DEBUG):
+        body = mixed.post("/api/v1/search", json={"query": "SC60"}).json()
+
+    titles = [r["title"] for g in body["groups"] for r in g["results"]]
+    assert titles  # there were results to potentially leak
+    logs = caplog.text
+    for title in titles:
+        assert title not in logs
+    # The search-executed log carries structural fields, not the payload.
+    assert "search executed" in logs

@@ -32,6 +32,27 @@ def test_build_registry_from_settings() -> None:
     assert [entry.connector.provider_id for entry in registry.all()] == ["mock"]
 
 
+def test_alliance_not_instantiated_unless_explicitly_enabled() -> None:
+    # Check 1: mock-only config must not build an Alliance connector.
+    registry = build_registry(Settings(_env_file=None, enabled_providers="mock"))
+    assert "alliance" not in {entry.connector.provider_id for entry in registry.all()}
+    # Explicitly listing it does build it (fixture mode, no network).
+    registry = build_registry(
+        Settings(_env_file=None, enabled_providers="mock,alliance", alliance_mode="fixture")
+    )
+    assert [entry.connector.provider_id for entry in registry.all()] == ["mock", "alliance"]
+
+
+async def test_provider_order_is_deterministic_regardless_of_completion() -> None:
+    # Check 2: outcomes follow registration order even when a fast provider
+    # finishes before a slow one.
+    registry = ProviderRegistry()
+    registry.register(SecondMockConnector(latency_seconds=0.05))  # "failing" id, slow
+    registry.register(MockProviderConnector())  # fast
+    aggregated = await registry.search_all("SC60", QueryType.AUTO, timeout_seconds=5.0)
+    assert [o.provider_id for o in aggregated.providers] == ["failing", "mock"]
+
+
 def test_build_registry_unknown_provider_fails_fast() -> None:
     settings = Settings(_env_file=None, enabled_providers="mock,typo_provider")
     with pytest.raises(ValueError, match="Unknown provider 'typo_provider'"):
@@ -105,6 +126,38 @@ async def test_search_all_reports_forbidden_distinctly() -> None:
     assert statuses["forbidden_one"].status == ProviderSearchStatus.FORBIDDEN
     assert statuses["forbidden_one"].error == "ProviderForbidden"
     assert aggregated.results  # the other provider's results survive
+
+
+async def test_mixed_reauth_forbidden_and_success_returns_survivors() -> None:
+    # Check 3: successful providers still return results when others report
+    # REAUTHENTICATION_REQUIRED or FORBIDDEN.
+    from app.providers.errors import ProviderForbidden, ReauthenticationRequired
+
+    class ReauthConnector(MockProviderConnector):
+        provider_id = "needs_auth"
+
+        async def search(self, query: str, query_type: QueryType):
+            raise ReauthenticationRequired("session expired")
+
+    class ForbiddenConnector(MockProviderConnector):
+        provider_id = "blocked"
+
+        async def search(self, query: str, query_type: QueryType):
+            raise ProviderForbidden("403")
+
+    registry = ProviderRegistry()
+    registry.register(MockProviderConnector())
+    registry.register(ReauthConnector())
+    registry.register(ForbiddenConnector())
+
+    aggregated = await registry.search_all("SC60", QueryType.AUTO, timeout_seconds=5.0)
+    statuses = {o.provider_id: o.status for o in aggregated.providers}
+    assert statuses == {
+        "mock": ProviderSearchStatus.SUCCESS,
+        "needs_auth": ProviderSearchStatus.REAUTH_REQUIRED,
+        "blocked": ProviderSearchStatus.FORBIDDEN,
+    }
+    assert aggregated.results  # mock's results survive
 
 
 async def test_search_all_disabled_provider_not_called() -> None:

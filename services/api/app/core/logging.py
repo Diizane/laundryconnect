@@ -65,3 +65,7 @@ def configure_logging(log_level: str = "INFO") -> None:
 
     # Uvicorn's access log duplicates our request logging; keep error logs.
     logging.getLogger("uvicorn.access").disabled = True
+    # httpx logs each request URL at INFO — for live provider calls that URL
+    # carries the search query (and could carry serials). Quiet it to WARNING
+    # so provider request lines are never logged (docs/DECISIONS/0004).
+    logging.getLogger("httpx").setLevel(logging.WARNING)

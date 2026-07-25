@@ -227,6 +227,35 @@ void main() {
     expect(find.text('SC60 Service Manual (sample)'), findsOneWidget);
   });
 
+  testWidgets(
+    'reauthentication-required provider shows banner but keeps other results',
+    (tester) async {
+      final api = FakeSearchApi(
+        (_) async => _response(
+          providers: [
+            const ProviderOutcome(
+              providerId: 'mock',
+              status: 'success',
+              resultCount: 1,
+            ),
+            const ProviderOutcome(
+              providerId: 'alliance',
+              status: 'reauthentication_required',
+            ),
+          ],
+        ),
+      );
+      await _pumpAppAndSearch(tester, _app(api));
+      await tester.pumpAndSettle();
+
+      // Degraded state surfaced…
+      expect(find.byKey(const Key('partial-failure-banner')), findsOneWidget);
+      expect(find.textContaining('alliance'), findsOneWidget);
+      // …without hiding the successful provider's results.
+      expect(find.text('SC60 Service Manual (sample)'), findsOneWidget);
+    },
+  );
+
   testWidgets('blank query does not trigger a search', (tester) async {
     final api = FakeSearchApi((_) async => _response());
     await tester.pumpWidget(_app(api));
