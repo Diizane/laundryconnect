@@ -93,3 +93,29 @@ or raw provider responses.
 4. Keep all normalisation inside the connector.
 5. Add connector tests with recorded/mocked responses (no real accounts).
 6. Enable via `ENABLED_PROVIDERS` per environment.
+
+## Alliance connector — human-in-the-loop auth (Milestone 8, ADR 0012)
+
+The first real connector (`app/providers/alliance/`) proves the
+architecture without any agent handling credentials and without live
+requests while access is UNKNOWN:
+
+- **fixture mode** (default, CI, dev): sanitised recorded/synthetic
+  fixtures, no network, passes `ConnectorContract`; results labelled
+  `DataOrigin.FIXTURE` (never presented as live).
+- **session mode**: loads a human-bootstrapped browser session from
+  `ALLIANCE_SESSION_PATH`; missing/invalid/expired → `reauthentication_
+  required` outcome. A live fetch is double-gated on
+  `alliance_access_approved` AND not-CI, and the reviewed live transport is
+  unimplemented until the access record is approved.
+- **credential mode**: refused — terms do not permit automated login;
+  credentials are never read from files, args, the API, or source.
+- **operator tools** (never CI): `python -m app.providers.alliance.bootstrap`
+  (visible-browser manual login → session file outside the repo, `0600`)
+  and `sanitise_capture` (strips cookies/tokens/usernames/account data/
+  signed URLs before fixtures are committed; human review required).
+
+Session contents and credentials are never logged, returned, or stored as
+attributes; security tests assert repr/log safety, that CI cannot enter
+live mode, that repo-path sessions are rejected, and that expired sessions
+report `reauthentication_required`.

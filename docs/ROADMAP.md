@@ -96,14 +96,20 @@ One provider only, as a proof of architecture. The connector must include
       IN PROGRESS: access decision record drafted for Alliance Laundry
       Systems, classified UNKNOWN pending account-owner input
       (docs/PROVIDER_ACCESS/alliance-laundry-systems.md)
-- [ ] Backend-only credentials (environment/secret manager; never mobile)
-- [ ] Session expiry handling
-- [ ] Provider rate limiting
-- [ ] Timeout and retry policy
-- [ ] Structured failure reporting (per-provider outcomes, typed errors)
-- [ ] Source provenance on every record (origin=live, text_source)
-- [ ] Document caching rules (respecting provider terms)
-- [ ] No credentials or provider HTML in logs
+- [x] Backend-only credentials (never mobile; never from files/args/API —
+      env/secret manager only, and credential mode is not implemented until
+      terms permit it) (ADR 0012)
+- [x] Session expiry handling (missing/invalid/expired → reauth_required)
+- [ ] Provider rate limiting (with the live transport, post-approval)
+- [ ] Timeout and retry policy (registry timeout applies; retry with the
+      live transport, post-approval)
+- [x] Structured failure reporting (reauthentication_required outcome,
+      typed provider errors, class-name-only exposure)
+- [x] Source provenance on every record (DataOrigin.FIXTURE for fixtures,
+      LIVE reserved for approved live fetches)
+- [ ] Document caching rules (with the live transport, post-approval)
+- [x] No credentials or provider HTML in logs (session values never logged;
+      security tests assert it)
 - [x] Fixture-based tests only in CI — never the live service
       (ConnectorContract harness + fixture policy, ADR 0011)
 - [x] Extraction in an isolated worker process with hard timeout and

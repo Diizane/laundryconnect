@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "synthetic": true,
+    "reviewed_by": "engineering — hand-authored representative shape, no real provider data",
+    "captured_from": "none (synthetic placeholder until access is approved)",
+    "date": "2026-07-23"
+  },
+  "records": [
+    {
+      "source_reference": "ALS-SC60-SVC",
+      "result_type": "document",
+      "title": "SC60 Washer-Extractor Service Manual",
+      "description": "Service and repair procedures for the SC60.",
+      "manufacturer": "Alliance Laundry Systems",
+      "brand": "Speed Queen",
+      "model": "SC60",
+      "document_type": "service_manual",
+      "revision": "Rev 4",
+      "published_at": "2023-05-01",
+      "source_path": "/s/document/ALS-SC60-SVC"
+    },
+    {
+      "source_reference": "ALS-SC60-PARTS",
+      "result_type": "document",
+      "title": "SC60 Parts Manual",
+      "description": "Exploded diagrams and parts list for the SC60.",
+      "manufacturer": "Alliance Laundry Systems",
+      "brand": "Speed Queen",
+      "model": "SC60",
+      "document_type": "parts_manual",
+      "revision": "Rev 2",
+      "published_at": "2022-11-15",
+      "source_path": "/s/document/ALS-SC60-PARTS"
+    },
+    {
+      "source_reference": "ALS-SC60-DL-F8524501",
+      "result_type": "part",
+      "title": "Door lock assembly",
+      "description": "Door lock assembly compatible with the SC60.",
+      "manufacturer": "Alliance Laundry Systems",
+      "brand": "Speed Queen",
+      "model": "SC60",
+      "part_number": "F8524501",
+      "source_path": "/s/part/F8524501"
+    }
+  ]
+}

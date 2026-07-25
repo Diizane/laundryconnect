@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     # by at most this long and is then reported as timed_out.
     provider_timeout_seconds: float = 10.0
 
+    # --- Alliance provider connector (Milestone 8) ---------------------------
+    # Mode: "fixture" (default; recorded/synthetic data, no network, CI-safe),
+    # "session" (human-bootstrapped browser session), or "credential"
+    # (disallowed until provider terms permit it).
+    alliance_mode: str = "fixture"
+    # Path to the operator's authenticated browser storage-state file. Must be
+    # OUTSIDE the repository. Never committed; never logged.
+    alliance_session_path: str | None = None
+    # Reflects docs/PROVIDER_ACCESS/alliance-laundry-systems.md. Live modes
+    # refuse to run until this is true. Currently UNKNOWN → must stay false.
+    alliance_access_approved: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return _split_csv(self.cors_origins)

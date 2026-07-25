@@ -17,6 +17,12 @@ build/
 .env.*
 !.env.example
 
+# Provider session state — authenticated browser storage; never commit.
+# (The loader also refuses any session path inside the repo, defence in depth.)
+*-session.json
+*session-state*.json
+.laundryconnect/
+
 # Node / React (admin portal, future)
 node_modules/
 apps/admin/dist/
