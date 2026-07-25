@@ -133,8 +133,62 @@ async def test_missing_session_reports_reauth_required() -> None:
     assert outcome.status == ProviderSearchStatus.REAUTH_REQUIRED
 
 
-# 5. Credential mode is refused (terms do not permit it).
+# 5. Credential mode is refused (permission not established).
 async def test_credential_mode_is_refused() -> None:
     connector = AllianceConnector(settings=_settings(alliance_mode="credential"))
     with pytest.raises(LiveModeRefused, match="credential"):
         await connector.search("SC60", QueryType.AUTO)
+
+
+# 6. Kill switch immediately disables live mode even when approved.
+async def test_kill_switch_refuses_live_even_when_approved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CI", raising=False)
+    path = _write_state(tmp_path / "valid.json", FUTURE)
+    connector = AllianceConnector(
+        settings=_settings(
+            alliance_mode="session",
+            alliance_session_path=path,
+            alliance_access_approved=True,
+            alliance_live_kill_switch=True,  # engaged
+        )
+    )
+    with pytest.raises(LiveModeRefused, match="kill switch"):
+        await connector.search("SC60", QueryType.AUTO)
+
+
+# 7. Connector→transport wiring: with the gate open, the connector calls the
+#    (injected, mocked) transport — proving no live request escapes in tests
+#    and normalisation is unchanged.
+async def test_connector_uses_transport_when_gate_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CI", raising=False)
+    path = _write_state(tmp_path / "valid.json", FUTURE)
+
+    class FakeTransport:
+        async def search_raw(self, query: str, query_type: QueryType) -> list[dict]:
+            return [
+                {
+                    "source_reference": "ALS-SC60-SVC",
+                    "title": "SC60 Service Manual",
+                    "model": "SC60",
+                    "manufacturer": "Alliance Laundry Systems",
+                }
+            ]
+
+    connector = AllianceConnector(
+        settings=_settings(
+            alliance_mode="session",
+            alliance_session_path=path,
+            alliance_access_approved=True,  # gate open (test-only), no network
+        ),
+        transport=FakeTransport(),
+    )
+    results = await connector.search("SC60", QueryType.AUTO)
+    assert len(results) == 1
+    # Live results are labelled live and keep provider attribution.
+    assert results[0].data_origin.value == "live"
+    assert results[0].provider_id == "alliance"
+    assert results[0].source_reference == "ALS-SC60-SVC"

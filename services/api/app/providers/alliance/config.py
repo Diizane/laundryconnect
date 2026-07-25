@@ -34,10 +34,13 @@ def resolve_mode(settings: Settings) -> AllianceMode:
 def require_live_allowed(settings: Settings) -> None:
     """Raise LiveModeRefused unless live provider access is permitted.
 
-    Two independent guards, both must pass:
+    Independent guards, all must pass:
+    - the kill switch must be off (safeguard 11/12);
     - never in CI (CI must not make live provider requests);
     - the access decision record must be approved (alliance_access_approved).
     """
+    if settings.alliance_live_kill_switch:
+        raise LiveModeRefused("Alliance live mode is disabled by the kill switch")
     if is_ci():
         raise LiveModeRefused("CI must not enter live provider mode")
     if not settings.alliance_access_approved:

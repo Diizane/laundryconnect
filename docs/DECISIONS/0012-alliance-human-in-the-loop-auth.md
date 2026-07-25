@@ -55,3 +55,33 @@ record is UNKNOWN.
   real sanitised fixtures — no other wiring changes.
 - CI and every automated agent stay in fixture mode permanently; live access
   is a deliberate, human, out-of-CI action.
+
+## Addendum (2026-07-24) — CONDITIONALLY APPROVED; live SessionTransport
+
+The access record is now **CONDITIONALLY APPROVED — authorised service
+partner** (owner-asserted authorisation, not written provider permission).
+The live transport is implemented WITHOUT any live request having been made:
+
+1. **`SessionTransport`** performs authenticated GETs using the bootstrapped
+   session, enforcing the safeguards per request: host allowlist (only
+   `portal.alliancels.net`), conservative rate limiting (default 12/min =
+   one request per 5s), a 20s timeout with ≤2 retries on transient
+   failures/5xx only, and session-expiry detection (401/403 or a login
+   redirect → `ReauthenticationRequired`, never a bypass). Fetches only the
+   requested query — no crawling. Mechanics are unit-tested against a mocked
+   client; the search endpoint path and response→record mapping are pinned
+   during the operator smoke test against a captured, sanitised fixture.
+2. **Kill switch** (`alliance_live_kill_switch`) refuses live access
+   immediately regardless of approval; the gate order is kill-switch → CI →
+   approved.
+3. **The master gate stays off by default.** `alliance_access_approved` is
+   false; a live request needs a deliberate per-environment opt-in AND a
+   valid bootstrapped session AND not-CI AND the pre-first-request review
+   approved by the business owner. No live request has occurred.
+4. Live results are labelled `DataOrigin.LIVE` and retain provider
+   attribution (source reference + portal URL). httpx moved to a runtime
+   dependency for the client (constructed lazily only on the gated path).
+
+Still deferred to post-approval-of-the-review: the first live request, the
+operator smoke test that pins the endpoint/parsing, and a removable-cache
+purge for Alliance-origin data.

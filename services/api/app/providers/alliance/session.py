@@ -99,6 +99,41 @@ def load_session(session_path: str | None, *, now: float | None = None) -> Sessi
     return metadata
 
 
+def load_cookies_for_transport(session_path: str | None) -> list[dict]:
+    """Return the session's cookies for the authenticated live client.
+
+    Backend-only and used solely to construct the HTTP client; cookie VALUES
+    are never logged. Reuses the same validation/expiry checks as
+    `load_session`, so a missing/invalid/expired session raises the typed
+    reauthentication errors before any live request is attempted.
+    """
+    if not session_path:
+        raise SessionMissing("ALLIANCE_SESSION_PATH is not configured")
+    try:
+        resolved = assert_path_outside_repo(Path(session_path))
+    except ValueError as exc:
+        raise SessionInvalid(str(exc)) from exc
+    if not resolved.is_file():
+        raise SessionMissing("no session file at the configured path")
+    # Validate + expiry (raises SessionInvalid/SessionExpired as appropriate).
+    load_session(session_path)
+    try:
+        data = json.loads(resolved.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SessionInvalid(f"session file unreadable ({type(exc).__name__})") from exc
+    cookies = _validate_storage_state(data)
+    return [
+        {
+            "name": c["name"],
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+        }
+        for c in cookies
+        if isinstance(c.get("name"), str)
+    ]
+
+
 def secure_session_file(path: Path) -> None:
     """Best-effort restrictive permissions (owner read/write only)."""
     try:

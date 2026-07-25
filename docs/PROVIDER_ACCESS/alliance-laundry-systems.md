@@ -1,10 +1,17 @@
 # Provider Access Decision Record — Alliance Laundry Systems
 
-- Status: **UNKNOWN — blocked pending account-owner input** (see
-  classification and required information below)
-- Date: 2026-07-23
-- Decision owner: business account owner (pending)
-- Prepared by: engineering (Milestone 8 Task 3)
+- Status: **CONDITIONALLY APPROVED — Authorised service partner**
+  (reclassified 2026-07-24 on verified business-owner information; see the
+  Classification section for the basis and mandatory safeguards)
+- Date: 2026-07-23 (created); 2026-07-24 (reclassified)
+- Decision owner: business account owner
+- Prepared by: engineering (Milestone 8)
+
+> **2026-07-24 update — reclassified to CONDITIONALLY APPROVED.** The
+> business owner supplied verified information about the account and
+> partnership (recorded below). Classification and safeguards are in the
+> Classification section. Live access is enabled only after the pre-first-
+> request review is approved; no live request has been made.
 
 > Method note: this record was prepared WITHOUT logging in and WITHOUT
 > automation code. Only unauthenticated, public pages were viewed
@@ -141,40 +148,71 @@ automated access are behind the login and remain unreviewed.
 5. Is written permission from an Alliance representative obtainable? (The
    strongest position; recommended.)
 
+## Verified business-owner information (2026-07-24)
+
+Supplied by the business account owner; the basis for the reclassification:
+
+- The business is an **authorised Alliance Laundry Systems service
+  partner**; its technicians repair Alliance equipment under that
+  partnership.
+- The business holds a **legitimate Alliance service portal account**
+  provided for that work, with **authorised access** to the manuals, parts
+  information, wiring diagrams, and machine documentation required for
+  repairs.
+- **No official API, SDK, or documented integration** exists for this
+  account — the service portal is the only available interface.
+- **LaundryConnect is an internal tool only**: not customer-facing, used
+  solely by the business's own authorised technicians, only to improve
+  search and retrieval of information they are already authorised to access.
+- The business does **not** redistribute Alliance documentation publicly or
+  sell access to it.
+- The business is **not aware of any published restriction** prohibiting
+  this internal use, but has **no written confirmation from Alliance**
+  specifically permitting browser automation or programmatic access.
+
 ## Classification
 
-**UNKNOWN** (unchanged after public reconnaissance).
+**CONDITIONALLY APPROVED — Authorised service partner.**
 
-Public reconnaissance identified the portal (Salesforce Experience Cloud,
-login-gated) and the login mechanism, and confirmed that no terms are
-published on the public pages. But the items that determine legality and
-compliance of automated access — the authenticated portal's terms of use,
-the account agreement/tier, official API availability, and
-indexing/caching/retention permissions — sit behind the login and cannot
-be verified without the account owner's information or a reviewed copy of
-the terms. `robots.txt` permissiveness applies to public-page crawling
-only and is not permission for authenticated automation. Classifying
-anything other than UNKNOWN would be fabrication.
+Basis: the business owner's knowledge of their own account and Alliance
+service partnership (above), **not** explicit written provider permission.
+The business accesses only material it is already authorised to access, for
+internal use by its own technicians, via the only interface available to
+the account (the portal). This is a conditional approval resting on
+owner-asserted authorisation; it is not a legal opinion and not provider
+sign-off.
 
-### What is permitted while UNKNOWN, and what is blocked
+### Mandatory safeguards (retained; conditions of this approval)
 
-A **fixture-only connector architecture is permitted** while the position is
-UNKNOWN, because it performs no live access: it serves synthetic/sanitised
-fixtures, makes no network request, and labels its data `fixture` (never
-`live`). The connector skeleton, configuration model, fixture data,
-session-lifecycle handling, and their tests exist on this basis (see
-ADR 0012 and `app/providers/alliance/`).
+1. Internal authorised technicians only.
+2. Backend-only authentication; no credentials in the mobile app, repo,
+   API, logs, or CI.
+3. **Manual browser login only** (operator bootstrap); **no automated
+   username/password login**.
+4. No MFA/CAPTCHA/bot-protection bypass.
+5. Session files stored **outside the repository**, restrictive permissions.
+6. **CI permanently fixture-only** — CI can never enter live mode.
+7. Conservative client-side request rate limiting.
+8. Fetch only the specifically requested models/documents (no crawling or
+   bulk harvesting).
+9. Preserve provider attribution on every record (source reference + URL).
+10. Cache is removable (Alliance-origin cached data can be purged).
+11. Configuration kill switch to disable Alliance live mode immediately.
+12. **Immediately disable live mode** if Alliance objects or publishes
+    contrary terms — and re-open this record.
 
-**Blocked until the record is approved or conditionally approved:**
+### What proceeds now, and what still gates the first live request
 
-- implementing the live `SessionTransport` (any authenticated fetch);
-- capturing authenticated fixtures from the live portal;
-- any live request to any Alliance system;
-- enabling credential-based automated login.
+Permitted now: implementing the live `SessionTransport` (auth, session
+handling, rate limiting, host allowlist, timeout/retry) with tests that use
+mocked HTTP — no live request.
 
-The connector enforces this: live paths are gated on
-`alliance_access_approved` (false while UNKNOWN) AND not-CI, and the live
-transport is intentionally unimplemented.
+Still gated: the **first live request** requires (a) the operator to enable
+`alliance_access_approved` per environment, (b) a valid manually-
+bootstrapped session, (c) not running under CI, and (d) an engineering
+pre-first-request review (proposed rate, host allowlist, timeout/retry,
+session-expiry handling, sanitisation, operator-only smoke test) approved by
+the business owner. `alliance_access_approved` remains **false by default**.
 
 ## Information required from the account owner (exact list)
 

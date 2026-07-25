@@ -47,14 +47,29 @@ class Settings(BaseSettings):
     # --- Alliance provider connector (Milestone 8) ---------------------------
     # Mode: "fixture" (default; recorded/synthetic data, no network, CI-safe),
     # "session" (human-bootstrapped browser session), or "credential"
-    # (disallowed until provider terms permit it).
+    # (refused; automated credential login is not established as permitted).
     alliance_mode: str = "fixture"
     # Path to the operator's authenticated browser storage-state file. Must be
     # OUTSIDE the repository. Never committed; never logged.
     alliance_session_path: str | None = None
-    # Reflects docs/PROVIDER_ACCESS/alliance-laundry-systems.md. Live modes
-    # refuse to run until this is true. Currently UNKNOWN → must stay false.
+    # Master live gate — mirrors the access decision record. The record is
+    # CONDITIONALLY APPROVED, but this stays FALSE by default so a live
+    # request requires a deliberate per-environment opt-in after the
+    # pre-first-request review. Live modes refuse unless this is true.
     alliance_access_approved: bool = False
+    # Kill switch (safeguard 11/12): when true, live access is refused
+    # immediately regardless of approval — flip this if Alliance objects.
+    alliance_live_kill_switch: bool = False
+    # Live-fetch controls (safeguards 7, 8). Conservative defaults.
+    alliance_base_url: str = "https://portal.alliancels.net"
+    alliance_allowed_hosts: str = "portal.alliancels.net"
+    alliance_rate_limit_per_minute: float = 12.0
+    alliance_request_timeout_seconds: float = 20.0
+    alliance_max_retries: int = 2
+
+    @property
+    def alliance_allowed_host_list(self) -> list[str]:
+        return _split_csv(self.alliance_allowed_hosts)
 
     @property
     def cors_origin_list(self) -> list[str]:
