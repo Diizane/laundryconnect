@@ -80,6 +80,8 @@ class ProviderSearchStatus(StrEnum):
     # A live provider session is missing, invalid, or expired; a human must
     # re-authenticate via the manual bootstrap. Never an automatic bypass.
     REAUTH_REQUIRED = "reauthentication_required"
+    # The provider refused access (e.g. 403) — a hard stop for human review.
+    FORBIDDEN = "forbidden"
 
 
 class ProviderOutcome(BaseModel):

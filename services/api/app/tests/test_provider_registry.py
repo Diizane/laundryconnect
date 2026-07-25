@@ -86,6 +86,27 @@ async def test_search_all_timeout() -> None:
     assert aggregated.results == []
 
 
+async def test_search_all_reports_forbidden_distinctly() -> None:
+    from app.providers.errors import ProviderForbidden
+
+    class ForbiddenConnector(MockProviderConnector):
+        provider_id = "forbidden_one"
+
+        async def search(self, query: str, query_type: QueryType):
+            raise ProviderForbidden("access refused")
+
+    registry = ProviderRegistry()
+    registry.register(MockProviderConnector())
+    registry.register(ForbiddenConnector())
+
+    aggregated = await registry.search_all("SC60", QueryType.AUTO, timeout_seconds=5.0)
+    statuses = {o.provider_id: o for o in aggregated.providers}
+    assert statuses["mock"].status == ProviderSearchStatus.SUCCESS
+    assert statuses["forbidden_one"].status == ProviderSearchStatus.FORBIDDEN
+    assert statuses["forbidden_one"].error == "ProviderForbidden"
+    assert aggregated.results  # the other provider's results survive
+
+
 async def test_search_all_disabled_provider_not_called() -> None:
     registry = ProviderRegistry()
     registry.register(

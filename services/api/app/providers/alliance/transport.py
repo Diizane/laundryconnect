@@ -21,7 +21,7 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 
 from app.providers.alliance.ratelimit import RateLimiter
-from app.providers.errors import ProviderError, ReauthenticationRequired
+from app.providers.errors import ProviderError, ProviderForbidden, ReauthenticationRequired
 from app.providers.models import QueryType
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,10 @@ class ResponseTooLarge(LiveFetchError):
     """A response exceeded the configured size cap."""
 
 
-class AccessForbidden(LiveFetchError):
-    """The provider returned 403 — stop and review; may indicate blocking."""
+class AccessForbidden(ProviderForbidden):
+    """The provider returned 403 — stop and review; may indicate blocking.
+    A `ProviderForbidden` so the registry surfaces a distinct `forbidden`
+    outcome (not a generic failure)."""
 
 
 # Raised/re-raised terminally; never caught by the transient-retry handler.

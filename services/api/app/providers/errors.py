@@ -32,6 +32,12 @@ class SessionExpired(ReauthenticationRequired):
     """The session's cookies have all expired."""
 
 
+class ProviderForbidden(ProviderError):
+    """The provider refused access (e.g. HTTP 403) — a hard stop that may
+    indicate blocking. Surfaced as a distinct `forbidden` outcome; never
+    retried or treated as a reauthentication loop."""
+
+
 class LiveModeRefused(ProviderError):
     """A live provider mode was requested but is not permitted here.
 
