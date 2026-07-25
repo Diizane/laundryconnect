@@ -98,7 +98,7 @@ One provider only, as a proof of architecture. The connector must include
       (docs/PROVIDER_ACCESS/alliance-laundry-systems.md)
 - [x] Backend-only credentials (never mobile; never from files/args/API —
       env/secret manager only, and credential mode is not implemented until
-      terms permit it) (ADR 0012)
+      automated credential login is established as permitted) (ADR 0012)
 - [x] Session expiry handling (missing/invalid/expired → reauth_required)
 - [ ] Provider rate limiting (with the live transport, post-approval)
 - [ ] Timeout and retry policy (registry timeout applies; retry with the

@@ -8,8 +8,9 @@ Human-in-the-loop authentication architecture (Milestone 8):
   `ALLIANCE_SESSION_PATH`; detects missing/invalid/expired sessions and
   raises `ReauthenticationRequired`. Live fetching is hard-gated on the
   access decision record being approved and on not running under CI.
-- **credential** mode: intentionally NOT implemented — the provider terms
-  do not (yet) permit automated credential login. The mode refuses.
+- **credential** mode: intentionally NOT implemented — the mode refuses
+  because permission for automated credential login has not been established
+  (the provider terms are UNKNOWN and unreviewed).
 
 No component here ever requests, stores, logs, or commits real credentials
 or session contents. See docs/PROVIDER_CONNECTORS.md and

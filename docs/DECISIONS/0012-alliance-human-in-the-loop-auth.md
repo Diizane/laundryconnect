@@ -21,8 +21,9 @@ record is UNKNOWN.
      `ALLIANCE_SESSION_PATH`, validates it, and raises typed
      `ReauthenticationRequired` (missing/invalid/expired). The registry maps
      that to a `reauthentication_required` per-provider outcome.
-   - `credential`: NOT implemented — provider terms do not permit automated
-     credential login; the mode refuses. No credentials are ever read.
+   - `credential`: NOT implemented — the mode refuses because permission for
+     automated credential login has not been established (the provider terms
+     are UNKNOWN and unreviewed). No credentials are ever read.
 2. **Live access is double-gated.** Even in session mode with a valid
    session, a live fetch requires BOTH `alliance_access_approved=true`
    (mirrors the access decision record) AND not running under CI. Both are

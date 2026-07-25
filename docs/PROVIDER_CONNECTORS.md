@@ -108,7 +108,8 @@ requests while access is UNKNOWN:
   required` outcome. A live fetch is double-gated on
   `alliance_access_approved` AND not-CI, and the reviewed live transport is
   unimplemented until the access record is approved.
-- **credential mode**: refused — terms do not permit automated login;
+- **credential mode**: refused because permission for automated credential
+  login has not been established (provider terms are UNKNOWN/unreviewed);
   credentials are never read from files, args, the API, or source.
 - **operator tools** (never CI): `python -m app.providers.alliance.bootstrap`
   (visible-browser manual login → session file outside the repo, `0600`)

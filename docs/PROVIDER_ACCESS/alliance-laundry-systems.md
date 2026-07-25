@@ -156,9 +156,25 @@ the terms. `robots.txt` permissiveness applies to public-page crawling
 only and is not permission for authenticated automation. Classifying
 anything other than UNKNOWN would be fabrication.
 
-Per Task 3 instructions: **work stops here.** No connector skeleton,
-configuration model, fixtures, or tests are created while the position is
-UNKNOWN.
+### What is permitted while UNKNOWN, and what is blocked
+
+A **fixture-only connector architecture is permitted** while the position is
+UNKNOWN, because it performs no live access: it serves synthetic/sanitised
+fixtures, makes no network request, and labels its data `fixture` (never
+`live`). The connector skeleton, configuration model, fixture data,
+session-lifecycle handling, and their tests exist on this basis (see
+ADR 0012 and `app/providers/alliance/`).
+
+**Blocked until the record is approved or conditionally approved:**
+
+- implementing the live `SessionTransport` (any authenticated fetch);
+- capturing authenticated fixtures from the live portal;
+- any live request to any Alliance system;
+- enabling credential-based automated login.
+
+The connector enforces this: live paths are gated on
+`alliance_access_approved` (false while UNKNOWN) AND not-CI, and the live
+transport is intentionally unimplemented.
 
 ## Information required from the account owner (exact list)
 

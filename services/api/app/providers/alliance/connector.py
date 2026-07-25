@@ -4,8 +4,9 @@ Fixture mode by default (no network, CI-safe). Session mode validates a
 human-bootstrapped browser session and raises `ReauthenticationRequired`
 when it is missing/invalid/expired; any actual live fetch is hard-gated on
 the access decision record being approved AND not running under CI, and is
-not implemented while access is UNKNOWN. Credential mode is refused (terms
-do not permit automated credential login).
+not implemented while access is UNKNOWN. Credential mode is refused because
+permission for automated credential login has not been established (terms
+are UNKNOWN/unreviewed).
 
 The connector never holds credentials or session contents as attributes —
 its repr is safe to log.
@@ -72,10 +73,10 @@ class AllianceConnector(ProviderConnector):
             return await transport.search_raw(query, query_type)
 
         if self._mode is AllianceMode.CREDENTIAL:
-            # Not implemented: provider terms do not permit automated
-            # credential login (access record UNKNOWN). Credentials are never
-            # read here.
-            raise LiveModeRefused("credential login is not permitted by provider terms")
+            # Not implemented: permission for automated credential login has
+            # not been established (access record UNKNOWN/unreviewed).
+            # Credentials are never read here.
+            raise LiveModeRefused("automated credential login is not established as permitted")
 
         # Session mode. Validate the session first (pure-local; raises
         # ReauthenticationRequired on missing/invalid/expired) so that outcome
@@ -115,7 +116,7 @@ class AllianceConnector(ProviderConnector):
         if self._mode is AllianceMode.FIXTURE:
             return ProviderHealth(status="ok", detail="fixture mode (no live access)")
         if self._mode is AllianceMode.CREDENTIAL:
-            return ProviderHealth(status="failed", detail="credential mode not permitted")
+            return ProviderHealth(status="failed", detail="credential mode not implemented")
         # Session mode: report reachability of a valid session without a
         # network call; never expose session details.
         try:
