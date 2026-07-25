@@ -107,9 +107,11 @@ class AllianceConnector(ProviderConnector):
                 domain=cookie.get("domain", ""),
                 path=cookie.get("path", "/"),
             )
+        # Client timeout is the larger download budget; searches are
+        # additionally bounded by the registry's per-provider timeout.
         client = httpx.AsyncClient(
             cookies=jar,
-            timeout=self._settings.alliance_request_timeout_seconds,
+            timeout=self._settings.alliance_download_timeout_seconds,
             follow_redirects=False,  # detect login redirects rather than follow
         )
         return SessionTransport(
@@ -118,6 +120,10 @@ class AllianceConnector(ProviderConnector):
             allowed_hosts=self._settings.alliance_allowed_host_list,
             rate_limiter=RateLimiter(self._settings.alliance_rate_limit_per_minute),
             max_retries=self._settings.alliance_max_retries,
+            max_concurrency=self._settings.alliance_max_concurrency,
+            max_retry_after_seconds=self._settings.alliance_max_retry_after_seconds,
+            max_response_bytes=self._settings.alliance_max_response_bytes,
+            max_document_bytes=self._settings.alliance_max_document_bytes,
         )
 
     def _normalise(self, record: dict) -> ProviderResult:

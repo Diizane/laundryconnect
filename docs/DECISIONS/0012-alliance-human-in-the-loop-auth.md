@@ -85,3 +85,55 @@ The live transport is implemented WITHOUT any live request having been made:
 Still deferred to post-approval-of-the-review: the first live request, the
 operator smoke test that pins the endpoint/parsing, and a removable-cache
 purge for Alliance-origin data.
+
+## Addendum (2026-07-24) — pre-first-request hardening
+
+Closing the gaps surfaced by the reviewer's six-item checklist, all tested
+against a mocked client (no live request):
+
+- **Host allowlist:** only `portal.alliancels.net`; redirects are never
+  followed (`follow_redirects=False`); off-host URLs raise `HostNotAllowed`
+  before any call, on both search and document download.
+- **Request limits:** single-flight concurrency (`max_concurrency=1` via a
+  semaphore); ~12 req/min (1 per 5s). **401**/login-redirect →
+  `ReauthenticationRequired`; **403** → `AccessForbidden`, a hard stop, not
+  retried and not looped as reauth (possible block → human review); **429**
+  → honours `Retry-After` (capped at 60s) and retries ≤2, else
+  `LiveFetchError`; **5xx** → backoff retry ≤2; other 4xx → `LiveFetchError`.
+- **Session validation:** missing/invalid/expired detected pre-request; a
+  login redirect is treated as auth failure, never followed.
+- **Download limits:** search response cap (5 MB) and document cap (100 MB),
+  enforced by Content-Length pre-check and actual-bytes check; duration
+  bounded by the client's 60s download timeout (search additionally bounded
+  by the registry's per-provider timeout). `fetch_document` downloads a
+  single document only.
+- **Operator smoke test** (`python -m app.providers.alliance.smoke_test`):
+  one model search + one optional document retrieval; refuses under CI /
+  unless approved / without a valid session; prints only non-sensitive
+  summaries. No indexing, crawling, or discovery.
+- **Fixture capture:** `sanitise_capture` strips cookies/tokens/usernames/
+  account data/signed-URL params/session ids; committed fixtures require
+  `_meta.reviewed_by` (test-enforced).
+
+Unchanged: `alliance_access_approved` stays false by default; no live
+request has been made.
+
+## Addendum (2026-07-24, #2) — URL policy and redirect hardening
+
+- **Full URL policy before opening a stream** (`_check_url`): scheme must be
+  exactly `https`; hostname must exactly match the allowlist; no userinfo
+  (username/password); an explicit port, if present, must be 443. Violations
+  raise a terminal `InvalidProviderURL` / `HostNotAllowed` (never retried),
+  with no full URL in the message. Verified rejected — without opening a
+  stream — for `http://`, `user:password@…`, `…:444`, and off-allowlist
+  hosts; plain HTTPS and explicit `:443` accepted.
+- **Every non-login 3xx is terminal** (`UnexpectedRedirect`): the body is
+  not read, the redirect is not followed, and it is not retried. Login
+  redirects still map to `ReauthenticationRequired`. Off-host redirects are
+  called out as refused. Diagnostics include only a sanitised destination
+  host/path — never query parameters, fragments, or userinfo. Verified:
+  redirect bodies are never consumed and exactly one request is attempted.
+
+Streaming size caps are genuine (incremental read, early abort, fresh stream
+per retry); Retry-After parsing is clamped and supports the HTTP-date form.
+Still: no live request; `alliance_access_approved` false by default.
