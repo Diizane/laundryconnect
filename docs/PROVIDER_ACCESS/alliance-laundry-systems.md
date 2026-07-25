@@ -165,9 +165,17 @@ This host is part of the same authorised service-partner access. It is now:
 - captured during bootstrap (the operator visits it in the logged-in
   browser so its cookies are saved).
 
-Still pending before results parse: the real response content type and
-structure, captured via `--dump-raw` and sanitised, to pin `_parse_records`.
-No document retrieval attempted. `alliance_access_approved` remains false.
+The sanitised SC60 response was captured (`--dump-raw`) and reviewed: it is
+an HTML results table (40 rows for SC60), each row a model variant linking
+to its assembly drawings (`/en/Manual?ManualId=…&ModelId=…`). The response
+content type is **HTML**, not JSON. A parser (`parser.py`, BeautifulSoup)
+was pinned against a sanitised excerpt (account/distributor details
+removed) and mapped to normalised `model` records with provider attribution
+(`source_url` on `pc.alliancels.net`).
+
+No document retrieval attempted. `alliance_access_approved` remains false;
+the next live run (re-validation of search parsing) is still gated on the
+per-command opt-in.
 
 ## Verified business-owner information (2026-07-24)
 

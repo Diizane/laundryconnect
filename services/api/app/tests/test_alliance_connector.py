@@ -8,7 +8,7 @@ import pytest
 from app.core.config import Settings
 from app.providers.alliance.connector import AllianceConnector
 from app.providers.base import ProviderConnector
-from app.providers.models import DataOrigin, QueryType
+from app.providers.models import DataOrigin, QueryType, ResultType
 from app.tests.connector_contract import ConnectorContract
 
 FIXTURES_DIR = Path(__file__).parent.parent / "providers" / "alliance" / "fixtures"
@@ -58,6 +58,28 @@ class TestFixtureMode:
             r.source_url is None or r.source_url.startswith("https://portal.alliancels.net")
             for r in results
         )
+
+
+def test_normalise_maps_live_parts_record() -> None:
+    connector = AllianceConnector(settings=_fixture_settings())
+    record = {
+        "source_reference": "als-model-429746",
+        "result_type": "model",
+        "title": "SC60AC2",
+        "model": "SC60AC2",
+        "description": None,
+        "manufacturer": "Alliance Laundry Systems",
+        "document_type": "assembly_drawings",
+        "source_url": "https://pc.alliancels.net/en/Manual?ManualId=15171&ModelId=429746",
+        "metadata": {"product_type": "Washer-Extractors", "model_id": "429746"},
+    }
+    result = connector._normalise(record)
+    assert result.provider_id == "alliance"
+    assert result.result_type == ResultType.MODEL
+    assert result.model == "SC60AC2"
+    assert result.source_url.startswith("https://pc.alliancels.net/en/Manual")
+    assert result.metadata["product_type"] == "Washer-Extractors"
+    assert result.access_method == "provider_portal"
 
 
 def test_alliance_fixtures_reviewed() -> None:
