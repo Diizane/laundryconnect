@@ -36,6 +36,7 @@ class DataOrigin(StrEnum):
 
     MOCK = "mock"
     MANUAL = "manual"  # manually indexed by staff
+    FIXTURE = "fixture"  # replayed recorded/synthetic fixtures — NOT live
     LIVE = "live"
     CACHED = "cached"
 
@@ -76,6 +77,9 @@ class ProviderSearchStatus(StrEnum):
     FAILED = "failed"
     TIMED_OUT = "timed_out"
     DISABLED = "disabled"
+    # A live provider session is missing, invalid, or expired; a human must
+    # re-authenticate via the manual bootstrap. Never an automatic bypass.
+    REAUTH_REQUIRED = "reauthentication_required"
 
 
 class ProviderOutcome(BaseModel):

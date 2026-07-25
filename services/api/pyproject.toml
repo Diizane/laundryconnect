@@ -22,6 +22,11 @@ dev = [
     "ruff>=0.6",
     "aiosqlite>=0.20",
 ]
+# Operator-only: the manual session bootstrap (visible browser). NOT needed
+# by the API runtime, tests, or CI. Requires `playwright install chromium`.
+bootstrap = [
+    "playwright>=1.47",
+]
 
 [build-system]
 requires = ["hatchling"]

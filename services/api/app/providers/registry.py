@@ -12,7 +12,9 @@ import time
 from dataclasses import dataclass
 
 from app.core.config import Settings
+from app.providers.alliance.connector import AllianceConnector
 from app.providers.base import ProviderConnector
+from app.providers.errors import ReauthenticationRequired
 from app.providers.mock.connector import MockProviderConnector
 from app.providers.models import (
     AggregatedSearch,
@@ -25,10 +27,11 @@ from app.providers.models import (
 logger = logging.getLogger(__name__)
 
 # Connectors that can be enabled via the ENABLED_PROVIDERS setting.
-# Real connectors (alliance, girbau, richard_jay) register here as they are
-# implemented (Milestone 8 onwards).
+# The Alliance connector defaults to fixture mode (no live requests); its
+# live paths are hard-gated on the access decision record (see its module).
 PROVIDER_FACTORIES: dict[str, type[ProviderConnector]] = {
     MockProviderConnector.provider_id: MockProviderConnector,
+    AllianceConnector.provider_id: AllianceConnector,
 }
 
 
@@ -110,6 +113,23 @@ class ProviderRegistry:
                     status=ProviderSearchStatus.TIMED_OUT,
                     latency_ms=latency_ms(),
                     error="TimeoutError",
+                ),
+                [],
+            )
+        except ReauthenticationRequired as exc:
+            # Expected operational state, not a crash: a human must re-run the
+            # manual session bootstrap. Log the class name only (messages may
+            # reference session material) at warning level, no traceback.
+            logger.warning(
+                "provider requires reauthentication",
+                extra={"provider": provider_id, "error": type(exc).__name__},
+            )
+            return (
+                ProviderOutcome(
+                    provider_id=provider_id,
+                    status=ProviderSearchStatus.REAUTH_REQUIRED,
+                    latency_ms=latency_ms(),
+                    error=type(exc).__name__,
                 ),
                 [],
             )
