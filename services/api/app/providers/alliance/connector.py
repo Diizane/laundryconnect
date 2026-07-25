@@ -2,11 +2,11 @@
 
 Fixture mode by default (no network, CI-safe). Session mode validates a
 human-bootstrapped browser session and raises `ReauthenticationRequired`
-when it is missing/invalid/expired; any actual live fetch is hard-gated on
-the access decision record being approved AND not running under CI, and is
-not implemented while access is UNKNOWN. Credential mode is refused because
-permission for automated credential login has not been established (terms
-are UNKNOWN/unreviewed).
+when it is missing/invalid/expired; the live fetch (`SessionTransport`) is
+hard-gated on the kill switch being off, not running under CI, and
+`alliance_access_approved` (false by default — a deliberate per-environment
+opt-in after the pre-first-request review). Credential mode is refused
+because permission for automated credential login has not been established.
 
 The connector never holds credentials or session contents as attributes —
 its repr is safe to log.
@@ -82,13 +82,42 @@ class AllianceConnector(ProviderConnector):
         # ReauthenticationRequired on missing/invalid/expired) so that outcome
         # is reported even before the access gate.
         load_session(self._settings.alliance_session_path)
-        # Only now would a live request happen — gate it hard.
+        # Only now would a live request happen — gate it hard (kill switch,
+        # CI, and the access-approved flag, which is false by default).
         require_live_allowed(self._settings)
-        # Access is approved and not in CI, but the reviewed live transport is
-        # deliberately not implemented yet; refuse rather than improvise a
-        # live request.
-        raise LiveModeRefused(
-            "live Alliance fetch is not implemented pending an approved, reviewed transport"
+        transport = self._transport or self._build_session_transport()
+        return await transport.search_raw(query, query_type)
+
+    def _build_session_transport(self) -> AllianceTransport:
+        """Construct the authenticated live transport. Reached only after the
+        live gate passes; imports httpx lazily so fixture/CI paths never need
+        it."""
+        import httpx
+
+        from app.providers.alliance.ratelimit import RateLimiter
+        from app.providers.alliance.session import load_cookies_for_transport
+        from app.providers.alliance.transport import SessionTransport
+
+        cookies = load_cookies_for_transport(self._settings.alliance_session_path)
+        jar = httpx.Cookies()
+        for cookie in cookies:
+            jar.set(
+                cookie["name"],
+                cookie["value"],
+                domain=cookie.get("domain", ""),
+                path=cookie.get("path", "/"),
+            )
+        client = httpx.AsyncClient(
+            cookies=jar,
+            timeout=self._settings.alliance_request_timeout_seconds,
+            follow_redirects=False,  # detect login redirects rather than follow
+        )
+        return SessionTransport(
+            client=client,
+            base_url=self._settings.alliance_base_url,
+            allowed_hosts=self._settings.alliance_allowed_host_list,
+            rate_limiter=RateLimiter(self._settings.alliance_rate_limit_per_minute),
+            max_retries=self._settings.alliance_max_retries,
         )
 
     def _normalise(self, record: dict) -> ProviderResult:
