@@ -61,8 +61,14 @@ class Settings(BaseSettings):
     # immediately regardless of approval — flip this if Alliance objects.
     alliance_live_kill_switch: bool = False
     # Live-fetch controls (safeguards 7, 8). Conservative defaults.
+    # Login is on portal.alliancels.net; parts/model search is on the Parts
+    # Connection host pc.alliancels.net. Both are authorised (service partner).
     alliance_base_url: str = "https://portal.alliancels.net"
-    alliance_allowed_hosts: str = "portal.alliancels.net"
+    alliance_allowed_hosts: str = "portal.alliancels.net,pc.alliancels.net"
+    # Full search URL template ({query} is URL-encoded and substituted).
+    alliance_search_url: str = (
+        "https://pc.alliancels.net/en/Search/StartsWith?searchString={query}&x.Show=Assembly"
+    )
     alliance_rate_limit_per_minute: float = 12.0
     alliance_request_timeout_seconds: float = 20.0
     alliance_max_retries: int = 2

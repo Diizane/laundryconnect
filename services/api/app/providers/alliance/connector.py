@@ -94,6 +94,7 @@ class AllianceConnector(ProviderConnector):
         it."""
         import httpx
 
+        from app.providers.alliance.parser import parse_search_html
         from app.providers.alliance.ratelimit import RateLimiter
         from app.providers.alliance.session import load_cookies_for_transport
         from app.providers.alliance.transport import SessionTransport
@@ -116,7 +117,6 @@ class AllianceConnector(ProviderConnector):
         )
         return SessionTransport(
             client=client,
-            base_url=self._settings.alliance_base_url,
             allowed_hosts=self._settings.alliance_allowed_host_list,
             rate_limiter=RateLimiter(self._settings.alliance_rate_limit_per_minute),
             max_retries=self._settings.alliance_max_retries,
@@ -124,10 +124,16 @@ class AllianceConnector(ProviderConnector):
             max_retry_after_seconds=self._settings.alliance_max_retry_after_seconds,
             max_response_bytes=self._settings.alliance_max_response_bytes,
             max_document_bytes=self._settings.alliance_max_document_bytes,
+            search_url_template=self._settings.alliance_search_url,
+            parser=parse_search_html,
         )
 
     def _normalise(self, record: dict) -> ProviderResult:
-        source_path = record.get("source_path")
+        # Live records carry a full source_url (Parts Connection); fixture
+        # records may carry a portal-relative source_path instead.
+        source_url = record.get("source_url")
+        if not source_url and record.get("source_path"):
+            source_url = f"{self._settings.alliance_base_url}{record['source_path']}"
         return ProviderResult(
             provider_id=self.provider_id,
             source_reference=record["source_reference"],
@@ -143,8 +149,9 @@ class AllianceConnector(ProviderConnector):
             part_number=record.get("part_number"),
             revision=record.get("revision"),
             published_at=_parse_date(record.get("published_at")),
-            source_url=f"https://portal.alliancels.net{source_path}" if source_path else None,
+            source_url=source_url,
             access_method="provider_portal",
+            metadata=record.get("metadata", {}),
         )
 
     async def health_check(self) -> ProviderHealth:

@@ -19,7 +19,9 @@ bodies.
 
 import argparse
 import asyncio
+import os
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from app.core.config import get_settings
@@ -54,7 +56,16 @@ def result_summary(result: ProviderResult) -> str:
     )
 
 
-async def _run(model: str, document_url: str | None) -> int:
+def _sniff(body: bytes) -> str:
+    head = body.lstrip()[:1]
+    if head in (b"{", b"["):
+        return "looks like JSON"
+    if head == b"<":
+        return "looks like HTML/XML"
+    return "unrecognised (binary or plain text)"
+
+
+async def _run(model: str, document_url: str | None, dump_raw: str | None) -> int:
     settings = get_settings()
     configure_logging(settings.log_level)
 
@@ -72,6 +83,24 @@ async def _run(model: str, document_url: str | None) -> int:
         return 2
 
     connector = AllianceConnector(settings=settings)
+
+    if dump_raw:
+        # Capture the raw (bounded, safeguarded) search response to a local
+        # file OUTSIDE the repo, so the operator can sanitise it and share the
+        # structure for parser pinning. Never printed to stdout.
+        from app.providers.alliance.config import assert_path_outside_repo
+
+        target = assert_path_outside_repo(Path(dump_raw))
+        transport = connector._build_session_transport()  # noqa: SLF001 - operator tool
+        print(f"[smoke] Capturing raw search response for {model!r}…")  # noqa: T201
+        body = await transport.fetch_search_raw(model)
+        target.write_bytes(body)
+        os.chmod(target, 0o600)
+        print(  # noqa: T201
+            f"[smoke] Wrote {len(body)} bytes to {target} ({_sniff(body)}). "
+            "Review and REMOVE any cookies/tokens/account ids before sharing."
+        )
+        return 0
 
     print(f"[smoke] ONE search for model {model!r}…")  # noqa: T201
     results = await connector.search(model, QueryType.MODEL)
@@ -97,8 +126,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Alliance live smoke test (operator only)")
     parser.add_argument("model", help="A single model number to search for, e.g. SC60")
     parser.add_argument("--document", default=None, help="Optional single document URL to retrieve")
+    parser.add_argument(
+        "--dump-raw",
+        default=None,
+        metavar="PATH",
+        help="Capture the raw search response to a local file (outside the repo) for review",
+    )
     args = parser.parse_args(argv)
-    return asyncio.run(_run(args.model, args.document))
+    return asyncio.run(_run(args.model, args.document, args.dump_raw))
 
 
 if __name__ == "__main__":

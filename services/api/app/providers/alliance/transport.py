@@ -4,11 +4,10 @@
 network request. `SessionTransport` performs authenticated live fetches
 using a human-bootstrapped session — but only via the connector's live
 gate (access approved, not CI, kill switch off). Its request mechanics
-(host allowlist, rate limiting, timeout/retry, session-expiry detection)
-are complete and unit-tested against a mocked client; the exact search
-endpoint path and response-to-record mapping are confirmed during the
-operator-only smoke test against a captured, sanitised fixture, not guessed
-here.
+(host allowlist, URL policy, rate limiting, streaming size caps, timeout/
+retry, redirect/session handling) are unit-tested against a mocked client.
+Body parsing is pluggable (`parser`); production injects the Parts
+Connection HTML parser, pinned against a captured, sanitised SC60 response.
 """
 
 import json
@@ -142,7 +141,6 @@ class SessionTransport:
         self,
         *,
         client: StreamingClient,
-        base_url: str,
         allowed_hosts: list[str],
         rate_limiter: RateLimiter,
         max_retries: int = 2,
@@ -150,21 +148,24 @@ class SessionTransport:
         max_retry_after_seconds: float = 60.0,
         max_response_bytes: int = 5 * 1024 * 1024,
         max_document_bytes: int = 100 * 1024 * 1024,
-        search_path: str = "/s/global-search/{query}",
+        search_url_template: str = (
+            "https://pc.alliancels.net/en/Search/StartsWith?searchString={query}&x.Show=Assembly"
+        ),
+        parser: Callable[[bytes], list[dict]] | None = None,
         sleep: Callable[[float], Awaitable[None]] | None = None,
         now: Callable[[], float] = time.time,
     ) -> None:
         import asyncio
 
         self._client = client
-        self._base_url = base_url.rstrip("/")
+        self._parser = parser or parse_json_records
         self._allowed_hosts = set(allowed_hosts)
         self._rate_limiter = rate_limiter
         self._max_retries = max_retries
         self._max_retry_after = max_retry_after_seconds
         self._max_response_bytes = max_response_bytes
         self._max_document_bytes = max_document_bytes
-        self._search_path = search_path
+        self._search_url_template = search_url_template
         self._semaphore = asyncio.Semaphore(max(1, max_concurrency))
         self._sleep = sleep or asyncio.sleep
         self._now = now
@@ -320,15 +321,23 @@ class SessionTransport:
             f"request failed ({type(last_exc).__name__ if last_exc else 'unknown'})"
         )
 
-    async def search_raw(self, query: str, query_type: QueryType) -> list[dict]:
-        """Fetch results for one query (safeguard 8 — no crawling). Body is
-        streamed under the 5 MB cap; the response→record mapping is pinned
-        during the operator smoke test; unrecognised shapes yield []."""
+    def _search_url(self, query: str) -> str:
         from urllib.parse import quote
 
-        url = f"{self._base_url}{self._search_path.format(query=quote(query.strip()))}"
-        body = await self._fetch(url, self._max_response_bytes)
-        return self._parse_records(body)
+        return self._search_url_template.format(query=quote(query.strip(), safe=""))
+
+    async def search_raw(self, query: str, query_type: QueryType) -> list[dict]:
+        """Fetch results for one query (safeguard 8 — no crawling). Body is
+        streamed under the 5 MB cap, then handed to the configured parser
+        (Alliance Parts Connection HTML in production)."""
+        body = await self._fetch(self._search_url(query), self._max_response_bytes)
+        return self._parser(body)
+
+    async def fetch_search_raw(self, query: str) -> bytes:
+        """Return the raw (bounded) search response bytes — used only by the
+        operator smoke test to capture the real response for parser pinning.
+        Applies every safeguard; never parses."""
+        return await self._fetch(self._search_url(query), self._max_response_bytes)
 
     async def fetch_document(self, url: str) -> bytes:
         """Download a single document (e.g. a PDF), streamed under the 100 MB
@@ -336,14 +345,15 @@ class SessionTransport:
         crawling."""
         return await self._fetch(url, self._max_document_bytes)
 
-    def _parse_records(self, body: bytes) -> list[dict]:
-        """Map a provider response body to raw records (same shape
-        FixtureTransport yields). Tolerant: [] on an unrecognised body; the
-        exact field paths are pinned against a sanitised fixture."""
-        try:
-            data = json.loads(body)
-        except (ValueError, UnicodeDecodeError):
-            logger.warning("alliance live response was not JSON")
-            return []
-        records = data.get("records") if isinstance(data, dict) else None
-        return records if isinstance(records, list) else []
+
+def parse_json_records(body: bytes) -> list[dict]:
+    """Default parser: a JSON `{"records": [...]}` body. Tolerant: [] on an
+    unrecognised body. Production uses the Parts Connection HTML parser
+    instead (injected by the connector)."""
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        logger.warning("alliance response was not JSON")
+        return []
+    records = data.get("records") if isinstance(data, dict) else None
+    return records if isinstance(records, list) else []

@@ -148,6 +148,35 @@ automated access are behind the login and remain unreviewed.
 5. Is written permission from an Alliance representative obtainable? (The
    strongest position; recommended.)
 
+## First supervised validation (2026-07-25)
+
+The operator ran one approved, search-only smoke test. Result: the
+bootstrapped session **authenticated successfully**, the request completed
+(`200 OK`), and every transport safeguard held with **no error**. The
+guessed portal path returned HTML (the search-page shell), not data.
+
+Correction from the business owner: the authenticated parts/model search is
+on the **Parts Connection host** `pc.alliancels.net`, e.g.
+`GET https://pc.alliancels.net/en/Search/StartsWith?searchString=SC60&x.Show=Assembly`.
+This host is part of the same authorised service-partner access. It is now:
+
+- added to the host allowlist (alongside `portal.alliancels.net`);
+- the configured search URL (`ALLIANCE_SEARCH_URL`);
+- captured during bootstrap (the operator visits it in the logged-in
+  browser so its cookies are saved).
+
+The sanitised SC60 response was captured (`--dump-raw`) and reviewed: it is
+an HTML results table (40 rows for SC60), each row a model variant linking
+to its assembly drawings (`/en/Manual?ManualId=…&ModelId=…`). The response
+content type is **HTML**, not JSON. A parser (`parser.py`, BeautifulSoup)
+was pinned against a sanitised excerpt (account/distributor details
+removed) and mapped to normalised `model` records with provider attribution
+(`source_url` on `pc.alliancels.net`).
+
+No document retrieval attempted. `alliance_access_approved` remains false;
+the next live run (re-validation of search parsing) is still gated on the
+per-command opt-in.
+
 ## Verified business-owner information (2026-07-24)
 
 Supplied by the business account owner; the basis for the reclassification:
