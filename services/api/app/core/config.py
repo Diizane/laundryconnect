@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     alliance_rate_limit_per_minute: float = 12.0
     alliance_request_timeout_seconds: float = 20.0
     alliance_max_retries: int = 2
+    # Max concurrent live requests (single-flight; no internal fan-out).
+    alliance_max_concurrency: int = 1
+    # Longest a 429 Retry-After will be honoured before giving up.
+    alliance_max_retry_after_seconds: float = 60.0
+    # Download caps (safeguard: bounded memory / no unbounded transfers).
+    alliance_max_response_bytes: int = 5 * 1024 * 1024  # search HTML/JSON: 5 MB
+    alliance_max_document_bytes: int = 100 * 1024 * 1024  # PDF: 100 MB
+    alliance_download_timeout_seconds: float = 60.0
 
     @property
     def alliance_allowed_host_list(self) -> list[str]:
