@@ -85,6 +85,7 @@ starting points, not answers to the open questions.
 | 8 | How does the portal respond to a **non-existent** ManualId (status code, body)? | _TBD_ | _TBD_ |
 | 9 | Approximate size range of a real manual / assembly drawing (sanity-check the 100 MB cap). | _TBD_ | _TBD_ |
 | 10 | Does opening a document consume/rotate the session, or require any additional auth step? | _TBD_ | _TBD_ |
+| 11 | Does opening the document URL directly in a **fresh unauthenticated** context succeed or fail? | _TBD_ | _TBD_ |
 
 > Hypotheses (NOT answers — recorded only so the observer knows what to look
 > for, and must be confirmed or refuted): the `/en/Manual` URL is likely an
@@ -117,10 +118,38 @@ bootstrap `alliance-session.json`). Using that same logged-in browser:
    - the **final** response's status, `Content-Type`, and `Content-Length`;
      whether the browser rendered a PDF/image inline or showed an HTML page;
    - whether the document host is `pc.alliancels.net` or something else.
-4. Repeat for one **assembly drawing** result and one deliberately **invalid**
-   `ManualId` (to capture the not-found behaviour for question 8).
-5. Note whether re-opening the same link later still works (question 5 —
+4. Note whether re-opening the same link later still works (question 5 —
    stable vs short-lived), without recording the actual URL if it is signed.
+5. For question 11, copy the final document URL and open it in a **fresh
+   unauthenticated context** (a private/incognito window with no Alliance
+   cookies); record only whether it succeeds, fails, or redirects to login —
+   never the URL itself if it carries a signature/token.
+
+Stop after **one** successful document observation. Do not bulk-open manuals
+or download multiple files.
+
+Sanitised capture format (fill this in and paste back — redact cookies,
+account details, and any signed query values; host + path only):
+
+```
+Search result selected:
+Initial request host/path:
+Initial status:
+Initial Content-Type:
+Initial response shape:          # HTML / PDF / other
+
+Secondary document request observed: yes/no
+Secondary host/path:             # query values redacted, e.g. /docstore?sig=<redacted>
+Secondary status:
+Secondary Content-Type:
+Redirect chain:                  # host/path hops only, or "none"
+Inline or attachment:            # displayed inline vs downloaded
+Temporary/signed URL indicators: # e.g. expiry/sig/token params present? yes/no
+Authenticated session required:  # yes/no
+Direct unauthenticated access result:  # succeeds / fails / redirects to login
+
+Other observations:
+```
 
 ### Method B — Operator capture (optional; only if exact headers are needed)
 
@@ -147,6 +176,7 @@ observation has actually been performed; do not fill in from assumption._
 - Q8 (not-found behaviour): _TBD_
 - Q9 (size range): _TBD_
 - Q10 (session effect): _TBD_
+- Q11 (direct unauthenticated access): _TBD_
 
 ## How findings feed later phases
 
