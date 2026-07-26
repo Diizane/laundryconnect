@@ -127,7 +127,10 @@ pipeline.
 
 - Phase 1 — Discover the document workflow: how a search result links to a
   document; whether URLs are stable or short-lived; direct vs intermediate
-  page; expected MIME types (PDF/image).
+  page; expected MIME types (PDF/image). Discovery framework + supervised
+  observation procedure recorded in
+  `docs/MILESTONE_9/phase-1-document-discovery.md`; findings pending one
+  human-in-the-loop observation (no automation, no CI).
 - Phase 2 — Secure transport: reuse existing safeguards, then verify
   Content-Type before parsing; stream under size limits; reject off-host
   documents and redirects; preserve timeout/retry; never log signed URLs or
