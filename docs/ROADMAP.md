@@ -87,39 +87,64 @@ increment. See git history for exact progress.
 - [x] Mobile: in-document search screen + page text viewer with prev/next
 - [x] 14 new backend tests + 6 new mobile tests
 
-## Milestone 8 — First real provider
+## Milestone 8 — First real provider (Alliance) — live SEARCH ✅
 
-One provider only, as a proof of architecture. The connector must include
-(overseer-required checklist):
+One provider (Alliance Laundry Systems), as a proof of architecture. Live
+**search** is complete, validated, and exposed through `/api/v1/search`.
 
-- [ ] Explicit authorization and provider terms review before any access —
-      IN PROGRESS: access decision record drafted for Alliance Laundry
-      Systems, classified UNKNOWN pending account-owner input
+- [x] Explicit authorization and provider terms review before any access —
+      access record CONDITIONALLY APPROVED (authorised service partner;
+      owner-asserted, not written provider permission)
       (docs/PROVIDER_ACCESS/alliance-laundry-systems.md)
-- [x] Backend-only credentials (never mobile; never from files/args/API —
-      env/secret manager only, and credential mode is not implemented until
-      automated credential login is established as permitted) (ADR 0012)
+- [x] Backend-only credentials (never mobile; never from files/args/API);
+      credential mode refused (permission not established) (ADR 0012)
+- [x] Human-in-the-loop session auth: manual browser bootstrap; no automated
+      login; no MFA/CAPTCHA bypass (ADR 0012)
 - [x] Session expiry handling (missing/invalid/expired → reauth_required)
-- [ ] Provider rate limiting (with the live transport, post-approval)
-- [ ] Timeout and retry policy (registry timeout applies; retry with the
-      live transport, post-approval)
-- [x] Structured failure reporting (reauthentication_required outcome,
-      typed provider errors, class-name-only exposure)
-- [x] Source provenance on every record (DataOrigin.FIXTURE for fixtures,
-      LIVE reserved for approved live fetches)
-- [ ] Document caching rules (with the live transport, post-approval)
-- [x] No credentials or provider HTML in logs (session values never logged;
-      security tests assert it)
-- [x] Fixture-based tests only in CI — never the live service
-      (ConnectorContract harness + fixture policy, ADR 0011)
-- [x] Extraction in an isolated worker process with hard timeout and
-      resource limits before processing provider documents (ADR 0011)
+- [x] Provider rate limiting (single-flight, conservative default 12/min)
+- [x] Timeout, retry, streaming size caps, strict URL policy, terminal
+      unexpected-redirect handling (ADR 0011/0012, streaming-verified)
+- [x] Structured failure reporting: success / timed_out / disabled /
+      reauthentication_required / forbidden; provider-local isolation
+- [x] Source provenance on every record (fixture vs live, honest labelling)
+- [x] Parts Connection HTML parser isolated from transport, pinned against a
+      sanitised production capture (regression-fixtured)
+- [x] Live search validated against production (40 SC60 results); no account
+      data in logs; httpx request-URL logging quieted (ADR 0004)
+- [x] Wired into `/api/v1/search`: mock-first default, explicit Alliance
+      opt-in, deterministic aggregation, stateless (no persistence)
+- [x] Fixture-based tests only in CI — never the live service (ADR 0011)
+- [x] Isolated extraction worker with hard timeout/resource limits (ADR 0011)
 
-Explicitly out of scope during this milestone: AI chat, OCR, ordering,
-inventory, admin portal expansion, additional providers.
+Deferred to Milestone 9 (kept out of M8 on purpose): document retrieval,
+any caching/persistence of provider data, background sync, OCR.
+
+## Milestone 9 — Document retrieval (separate from search)
+
+Uses the same authenticated transport but is a distinct engineering
+concern; to be reviewed and tested independently of the validated search
+pipeline.
+
+- Phase 1 — Discover the document workflow: how a search result links to a
+  document; whether URLs are stable or short-lived; direct vs intermediate
+  page; expected MIME types (PDF/image).
+- Phase 2 — Secure transport: reuse existing safeguards, then verify
+  Content-Type before parsing; stream under size limits; reject off-host
+  documents and redirects; preserve timeout/retry; never log signed URLs or
+  session ids. (`fetch_document` size-cap + host-allowlist plumbing exists.)
+- Phase 3 — API contract: decide proxy vs temporary internal download
+  endpoint vs metadata-only; avoid exposing provider URLs directly without a
+  strong reason.
+- Phase 4 — Persistence: keep current behaviour — no document persistence,
+  no caching, no background downloads (each a separate future milestone if
+  ever needed).
 
 ## Post-MVP direction
 
-Technician accounts and roles, offline caching and downloaded manuals,
-part confirmation by serial range, retrieval-augmented document Q&A with
-citations, admin portal build-out, additional providers.
+Once document retrieval is validated, treat the Alliance integration as
+feature-complete and shift toward product features: unified cross-provider
+ranking, technician search UX, favourites/recent searches, offline fixture
+packs, additional manufacturer connectors on the same transport/registry
+architecture, and operational tooling (session health, provider
+diagnostics, admin visibility). Also: technician accounts/roles and
+retrieval-augmented document Q&A with citations.
