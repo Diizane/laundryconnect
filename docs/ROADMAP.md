@@ -125,12 +125,14 @@ Uses the same authenticated transport but is a distinct engineering
 concern; to be reviewed and tested independently of the validated search
 pipeline.
 
-- Phase 1 — Discover the document workflow: how a search result links to a
-  document; whether URLs are stable or short-lived; direct vs intermediate
-  page; expected MIME types (PDF/image). Discovery framework + supervised
-  observation procedure recorded in
-  `docs/MILESTONE_9/phase-1-document-discovery.md`; findings pending one
-  human-in-the-loop observation (no automation, no CI).
+- [x] Phase 1 — Discover the document workflow ✅ (2026-07-26): supervised
+  observation complete and reviewed. `/en/Manual` is an intermediate HTML
+  menu; documents are stable unsigned PDFs at
+  `pc.alliancels.net/manuals/<Category>/<PartNumber>.pdf`, session-protected
+  (anonymous → 302 login), no extra hosts, no redirects when authenticated;
+  bounded traversal (max 2 HTML pages + 1 PDF). API decision settled:
+  backend proxies document bytes. Full findings + Phase 2/3 requirements in
+  `docs/MILESTONE_9/phase-1-document-discovery.md`.
 - Phase 2 — Secure transport: reuse existing safeguards, then verify
   Content-Type before parsing; stream under size limits; reject off-host
   documents and redirects; preserve timeout/retry; never log signed URLs or

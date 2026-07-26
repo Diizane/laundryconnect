@@ -1,10 +1,13 @@
 # Milestone 9 — Phase 1: Document retrieval discovery
 
-Status: **Investigation open — findings not yet captured.** No implementation
-of document retrieval may begin until the "Findings" section below is
-completed from a supervised live observation. Do not guess any value in the
-"Open questions" table; every answer must come from an observation, and be
-marked with how it was obtained.
+Status: **COMPLETE — findings captured and reviewed (2026-07-26).** A single
+supervised observation was performed by the authorised operator on the
+authenticated machine (operator performed the login personally; navigation
+and sanitised network capture were then performed under the operator's
+direct supervision within that session). One document was opened (DR75 →
+D0568 Technical Manual); no bulk retrieval, no crawling. Every answer in the
+"Open questions" table comes from that observation, and the raw sanitised
+capture is transcribed verbatim in the Findings section.
 
 This phase is deliberately documentation-only. It records what the existing
 code already establishes as fact, enumerates exactly what is still unknown,
@@ -75,24 +78,23 @@ starting points, not answers to the open questions.
 
 | # | Question | Answer | How obtained |
 |---|----------|--------|--------------|
-| 1 | Does `/en/Manual?ManualId=…&ModelId=…` serve a document body directly, or an intermediate HTML page? | _TBD_ | _TBD_ |
-| 2 | If intermediate: how is the real document reached (link in HTML, JS, a second request, a redirect)? | _TBD_ | _TBD_ |
-| 3 | What is the `Content-Type` of the final document response? (`application/pdf`, `image/*`, other?) | _TBD_ | _TBD_ |
-| 4 | Is there a `Content-Disposition` / filename? | _TBD_ | _TBD_ |
-| 5 | Are the final document URLs **stable** (reusable `/en/Manual?...` links) or **short-lived/signed** (tokens, expiry, one-time)? | _TBD_ | _TBD_ |
-| 6 | On which host(s) does the final document live? Still `pc.alliancels.net`, or a CDN/blob host? (Determines allowlist adequacy.) | _TBD_ | _TBD_ |
-| 7 | What redirect behaviour occurs between the `/en/Manual` URL and the final bytes? (count, hosts, login redirects) | _TBD_ | _TBD_ |
-| 8 | How does the portal respond to a **non-existent** ManualId (status code, body)? | _TBD_ | _TBD_ |
-| 9 | Approximate size range of a real manual / assembly drawing (sanity-check the 100 MB cap). | _TBD_ | _TBD_ |
-| 10 | Does opening a document consume/rotate the session, or require any additional auth step? | _TBD_ | _TBD_ |
-| 11 | Does opening the document URL directly in a **fresh unauthenticated** context succeed or fail? | _TBD_ | _TBD_ |
+| 1 | Does `/en/Manual?ManualId=…&ModelId=…` serve a document body directly, or an intermediate HTML page? | **Intermediate HTML page** (200, `text/html`): an "Additional Information" menu (assembly drawings, Related Literature, wiring diagrams, parts lists) — never the document itself. | Supervised observation, 2026-07-26 |
+| 2 | If intermediate: how is the real document reached? | Plain HTML links, no JS required. Observed path: `/en/Manual` → (optionally) `/en/Model/Literature?ManualId=…&ModelId=…` (HTML list of documents) → `<a href="/manuals/<Category>/<PartNumber>.pdf?<ticks>">` with a PDF icon. Assembly drawings link via `/en/Manual/DrawingsPrint?…` from the same menu. | Supervised observation |
+| 3 | `Content-Type` of the final document response? | `application/pdf` (body verified to begin `%PDF-1.6`). | Supervised observation (header capture) |
+| 4 | `Content-Disposition` / filename? | **No `Content-Disposition` header.** Filename is the URL's `<PartNumber>.pdf`. | Supervised observation (header capture) |
+| 5 | Stable or short-lived/signed URLs? | **Stable.** The query value is an identical timestamp-style cache-buster on every link on the page, and the PDF is served identically **without** it (verified: 200, same length, same magic bytes). Canonical identity is the path `/manuals/<Category>/<PartNumber>.pdf`. No token, no expiry, no signature. | Supervised observation (fetch with and without param) |
+| 6 | Final document host? | `pc.alliancels.net` — same host, already in the allowlist. No CDN/blob/third-party host observed anywhere in the chain. | Supervised observation |
+| 7 | Redirect behaviour? | **None when authenticated** — every hop returns a direct 200. (Unauthenticated → single 302 to login; see Q11.) | Supervised observation |
+| 8 | Non-existent ManualId behaviour? | Not probed live (kept to the one-document scope). The observed equivalent: a **valid** manual with no assembly drawings returns 200 HTML with the message "The assembly drawings are not available for the selected model." Genuine 404 behaviour to be confirmed against fixtures in Phase 2 tests; the transport treats any 4xx as a terminal error already. | Supervised observation (partial); deferred |
+| 9 | Approximate document size? | Observed manual: **420,607 bytes (~411 KB)** with `Content-Length` present and `Accept-Ranges: bytes`. Far under the 100 MB cap. | Supervised observation (header capture) |
+| 10 | Session consumed/rotated by document access? | No additional auth step observed; the same session served page and document requests repeatedly (fetch with and without param both 200). | Supervised observation |
+| 11 | Fresh unauthenticated access? | **Fails closed: 302 redirect to login** with `Location: /?ReturnUrl=<pdf path>` — with or without the query param. Documents are session-protected server-side. | Cookie-less HEAD request during observation |
 
-> Hypotheses (NOT answers — recorded only so the observer knows what to look
-> for, and must be confirmed or refuted): the `/en/Manual` URL is likely an
-> intermediate HTML viewer page rather than raw PDF bytes; if so, the real
-> asset may sit behind a second request and possibly a signed/temporary URL on
-> a different host. **These are guesses and must not be coded against until
-> confirmed.**
+> Hypotheses recorded before observation, now resolved: "the `/en/Manual` URL
+> is likely an intermediate HTML viewer page" — **CONFIRMED**. "The real asset
+> may sit behind … possibly a signed/temporary URL on a different host" —
+> **REFUTED**: same host, stable unsigned path (the query value is a
+> cache-buster). The real system is simpler than the cautious assumptions.
 
 ## Supervised observation procedure (human-in-the-loop, no automation)
 
@@ -163,22 +165,123 @@ investigation-only. Until then, Method A is sufficient.
 
 ## Findings
 
-_To be completed from the supervised observation above. Leave as TBD until an
-observation has actually been performed; do not fill in from assumption._
+Captured 2026-07-26 from a single supervised observation (one document; DR75
+Tumbler → D0568 Technical Manual). Reviewed and approved. The sanitised
+capture, verbatim:
 
-- Q1 (direct vs intermediate): _TBD_
-- Q2 (path to real document): _TBD_
-- Q3 (Content-Type): _TBD_
-- Q4 (Content-Disposition/filename): _TBD_
-- Q5 (URL stability): _TBD_
-- Q6 (final host): _TBD_
-- Q7 (redirect behaviour): _TBD_
-- Q8 (not-found behaviour): _TBD_
-- Q9 (size range): _TBD_
-- Q10 (session effect): _TBD_
-- Q11 (direct unauthenticated access): _TBD_
+```
+Search result selected: DR75 (Tumbler), Manual "Date 9/99" → Related Literature →
+                        D0568 Technical Manual (English)
+
+Initial request host/path: pc.alliancels.net /en/Manual (ManualId/ModelId params)
+Initial status: 200
+Initial Content-Type: text/html
+Initial response shape: HTML — an intermediate menu page ("Additional Information":
+                        assembly drawings, Related Literature, wiring diagrams, parts
+                        lists). NOT the document.
+
+Secondary document request observed: yes (two hops, both HTML menus, then the PDF)
+  Hop 1: /en/Manual?ManualId=…&ModelId=…            → 200 text/html (menu)
+  Hop 2: /en/Model/Literature?ManualId=…&ModelId=…  → 200 text/html (lists 7 documents
+         with per-document PDF links)
+Secondary host/path: pc.alliancels.net /manuals/<Category>/<PartNumber>.pdf?<ticks>
+                     (observed categories: Production, PartsService, DOC)
+Secondary status: 200
+Secondary Content-Type: application/pdf (Content-Length: 420,607; body begins %PDF-1.6;
+                        static IIS file: ETag + Last-Modified 2021 + Accept-Ranges)
+Redirect chain: none when authenticated (direct 200)
+Inline or attachment: inline (no Content-Disposition header; browser renders in-tab)
+Temporary/signed URL indicators: NO. The query value is an identical timestamp-style
+                     cache-buster on every link on the page, and the PDF is served
+                     identically WITHOUT it (verified: 200, same bytes). Paths are
+                     stable static file paths keyed by part number.
+Authenticated session required: yes
+Direct unauthenticated access result: 302 redirect to login
+                     (Location: /?ReturnUrl=<the pdf path>) — with or without the
+                     query param. Fails closed.
+
+Other observations:
+- The /en/Manual link from search results is ALWAYS an intermediate HTML page; for this
+  model, assembly drawings were "not available" and the page pointed to Related
+  Literature instead. Document discovery therefore requires parsing 1–2 intermediate
+  HTML pages (bounded, not crawling).
+- Document host is pc.alliancels.net — already in the allowlist. No CDN, no other host.
+- Literature page states: "Document is available for download if PDF icon is visible,
+  click icon to download."
+- Size sanity: this manual was ~411 KB; well under the 100 MB cap.
+- Account identifier was visible in the page header — redacted from these findings.
+```
+
+### Additional reviewed observations
+
+**Document discovery is bounded — an architectural property, not a policy
+promise.** The worst-case traversal from a search result to document bytes is:
+
+```
+Search result → /en/Manual (HTML menu) → /en/Model/Literature (HTML list)
+             → /manuals/<Category>/<PartNumber>.pdf
+```
+
+Maximum depth: **2 HTML pages + 1 PDF**, each reached by following one
+explicit link for one user action. This is page parsing, not crawling, and
+Phase 2 must preserve that bound structurally (no link-following loops).
+
+**The document list carries useful metadata.** The Literature page exposes,
+per document: part number, document type (Declaration of Conformity /
+Installation Operation Maintenance Mnl / Parts Mnl / Technical Mnl), a
+comment (revision/date), available languages, and whether a PDF is
+downloadable. Phase 2's parser should capture this metadata even though the
+first Android release only opens a document directly — it enables a richer
+document-picker UI later (multiple manuals, language selection) without a
+parser redesign.
+
+## Phase 1 conclusions (approved)
+
+1. **`/en/Manual` is an intermediate page.** Document retrieval is HTML page
+   parsing (one or two bounded pages), not URL rewriting.
+2. **No allowlist change needed.** Every request in the chain stays on
+   `pc.alliancels.net`; no CDN, blob storage, or third-party document host.
+3. **The session model is server-side and fails closed.** Anonymous document
+   requests receive a 302 to login (`ReturnUrl=<pdf>`); URLs alone are
+   insufficient. The transport's existing login-redirect → 
+   `ReauthenticationRequired` mapping applies to document fetches unchanged.
+4. **Document URLs are stable and unsigned.** Canonical identity is the path
+   `/manuals/<Category>/<PartNumber>.pdf`; the query value is a cache-buster
+   served identically when omitted. No signed-URL handling is needed.
+5. **API decision — settled: the backend proxies document bytes.** The mobile
+   client has no Alliance session, provider URLs stay private, authentication
+   stays server-side, the existing transport is reused, and future providers
+   fit the same abstraction.
+
+### Phase 2 requirements distilled from the evidence
+
+- Validate `Content-Type: application/pdf` before streaming; reject
+  `text/html` at the final fetch stage (an HTML body at the PDF stage means a
+  wrong or error page, not a document).
+- Validate magic bytes: the stream must begin `%PDF-` before any bytes are
+  forwarded (protects against misconfigured servers).
+- Translate 404 into a domain-specific `DocumentNotFound` rather than a
+  generic transport error.
+- Keep streaming — no buffering; existing size caps and streaming
+  implementation unchanged.
+- Preserve the bounded traversal: at most the two observed intermediate pages
+  per user action, no link-following beyond them.
+- Capture the Literature-page document metadata during parsing.
+
+### Phase 3 shape (to be recorded as an ADR before implementation)
+
+`GET /api/v1/documents/{provider}/{document_id}` (or equivalent), internally:
+lookup document → fetch via provider transport → validate → stream bytes →
+client. The mobile app never sees an Alliance URL.
 
 ## How findings feed later phases
+
+> Written before the observation; retained for the reasoning record. The
+> conditionals below are now resolved by the "Phase 1 conclusions" section:
+> Q1 = intermediate page (bounded parsing required), Q5 = stable unsigned
+> URLs, Q6 = same host, and the API decision is settled as backend
+> byte-proxying (because documents are session-protected, not because URLs
+> are signed — see Q11).
 
 - **Phase 2 (secure transport):** the `Content-Type` (Q3), host (Q6), and
   redirect (Q7) findings determine the document-specific validation to add to
@@ -203,5 +306,8 @@ observation has actually been performed; do not fill in from assumption._
       `fetch_document` safeguards, gaps).
 - [x] Enumerate the open questions that require observation.
 - [x] Define a supervised, no-automation observation procedure.
-- [ ] Capture findings from an actual supervised observation (blocked on a
-      human running Method A). **← the remaining Phase 1 step.**
+- [x] Capture findings from an actual supervised observation (performed
+      2026-07-26; one document; reviewed and approved).
+
+**Phase 1 is complete.** Next: Phase 2 (document transport validation +
+bounded page parsing) and the Phase 3 ADR, per the conclusions above.
