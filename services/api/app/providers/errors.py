@@ -38,6 +38,17 @@ class ProviderForbidden(ProviderError):
     retried or treated as a reauthentication loop."""
 
 
+class ProviderDocumentsUnsupported(ProviderError):
+    """This provider does not implement the document workflow. A stable
+    domain outcome (mapped to a 4xx by the API), never a crash."""
+
+
+class InvalidDocumentReference(ProviderError):
+    """A document/manual reference failed the provider's strict format
+    validation. Raised before any request is attempted — client-supplied
+    references can never reach the transport unvalidated."""
+
+
 class DocumentNotFound(ProviderError):
     """The provider has no document at the requested location (HTTP 404 in
     the document workflow). A domain outcome, not a transport failure —

@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     # Live-fetch controls (safeguards 7, 8). Conservative defaults.
     # Login is on portal.alliancels.net; parts/model search is on the Parts
     # Connection host pc.alliancels.net. Both are authorised (service partner).
+    # Signing secret for opaque document tokens (ADR 0014). When empty, an
+    # ephemeral per-process secret is used (fine for dev/tests; tokens then
+    # do not survive restarts). Production sets DOCUMENT_TOKEN_SECRET.
+    # Rotating it invalidates all outstanding tokens.
+    document_token_secret: str = ""
+
     alliance_base_url: str = "https://portal.alliancels.net"
     # Parts Connection base — provider-relative document-workflow paths
     # (/en/Manual, /en/Model/Literature, /manuals/...) resolve against this.

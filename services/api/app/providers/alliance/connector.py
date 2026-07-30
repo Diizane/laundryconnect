@@ -13,6 +13,7 @@ its repr is safe to log.
 """
 
 import logging
+import re
 from datetime import date
 from typing import ClassVar
 
@@ -26,7 +27,11 @@ from app.providers.alliance.document_parser import parse_literature_page, parse_
 from app.providers.alliance.session import load_session
 from app.providers.alliance.transport import AllianceTransport, FixtureTransport
 from app.providers.base import ProviderConnector
-from app.providers.errors import LiveModeRefused
+from app.providers.errors import (
+    DocumentNotFound,
+    InvalidDocumentReference,
+    LiveModeRefused,
+)
 from app.providers.models import (
     DataOrigin,
     ProviderDocumentInfo,
@@ -37,6 +42,15 @@ from app.providers.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Document reference from search-result metadata: '<ManualId>:<ModelId>',
+# digits only. Validated before any request is built.
+_DOCUMENT_REF = re.compile(r"^(\d{1,12}):(\d{1,12})$")
+# The only document location Phase 1 observed. Anything else fails closed.
+# Segments must start alphanumeric so dot-only segments ('..') can't match.
+_DOCUMENT_PATH = re.compile(
+    r"^/manuals/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9 ._-]*\.pdf$"
+)
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -117,11 +131,26 @@ class AllianceConnector(ProviderConnector):
             return path_or_url
         return f"{self._settings.alliance_parts_base_url}{path_or_url}"
 
-    async def discover_documents(self, manual_path: str) -> list[ProviderDocumentInfo]:
-        """From a search result's `/en/Manual?...` link, list the documents
-        the provider offers for that model, with metadata. Fetches at most
-        two pages; returns metadata only (no document bytes, no persistence).
+    async def discover_documents(self, reference: str) -> list[ProviderDocumentInfo]:
+        """Provider document contract: `reference` is `<ManualId>:<ModelId>`
+        (numeric catalog identifiers, as carried in search-result metadata).
+        Strictly validated BEFORE any request — a client-supplied reference
+        can never inject a URL or path. The manual URL is built server-side.
         """
+        match = _DOCUMENT_REF.match(reference or "")
+        if match is None:
+            raise InvalidDocumentReference(
+                "document reference must be '<manual id>:<model id>' (digits only)"
+            )
+        manual_id, model_id = match.groups()
+        return await self._discover_from_manual_path(
+            f"/en/Manual?ManualId={manual_id}&ModelId={model_id}"
+        )
+
+    async def _discover_from_manual_path(self, manual_path: str) -> list[ProviderDocumentInfo]:
+        """From a `/en/Manual?...` link, list the documents the provider
+        offers for that model, with metadata. Fetches at most two pages;
+        returns metadata only (no document bytes, no persistence)."""
         transport = self._document_transport()
         manual = parse_manual_page(await transport.fetch_page(self._resolve_path(manual_path)))
 
@@ -164,9 +193,14 @@ class AllianceConnector(ProviderConnector):
     async def fetch_document(self, source_path: str) -> bytes:
         """Fetch ONE document's bytes (validated PDF) via the transport. The
         caller (Phase 3 API) streams these to the client; nothing is
-        persisted. Raises `DocumentNotFound` / `InvalidDocumentContent` /
+        persisted. The path shape is validated first (pure-local, fail
+        closed) so only `/manuals/<Category>/<file>.pdf` paths — the only
+        document location Phase 1 observed — can ever reach the transport.
+        Raises `DocumentNotFound` / `InvalidDocumentContent` /
         `ReauthenticationRequired` / `ProviderForbidden` as domain outcomes.
         """
+        if _DOCUMENT_PATH.match(source_path or "") is None:
+            raise DocumentNotFound("no document at this location")
         transport = self._document_transport()
         return await transport.fetch_document(self._resolve_path(source_path))
 
