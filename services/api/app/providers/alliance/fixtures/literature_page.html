@@ -14,13 +14,18 @@
     <a href="/en/Manual?ManualId=1001&amp;ModelId=2002">FX135 Date 9/99</a> &gt; Related Literature
   </div>
 
-  <p>
-    Found 4 documents for FX135. Printed literature is no longer available.
-    Document is available for download if PDF icon is visible, click icon to
-    download. (Requires Adobe Reader.)
-  </p>
-
+  <!-- Production nests the document table inside an outer layout table
+       (confirmed by live validation 2026-07-30): the wrapper row must never
+       parse as a document record. -->
   <table>
+    <tr>
+      <td>
+        <p>
+          Found 4 documents for FX135. Printed literature is no longer available.
+          Document is available for download if PDF icon is visible, click icon to
+          download. (Requires Adobe Reader.)
+        </p>
+        <table>
     <tr>
       <th>Part #</th><th>Type</th><th>Comments</th><th>Languages</th><th>Open</th>
     </tr>
@@ -51,6 +56,9 @@
       <td>Date 4/01</td>
       <td>English</td>
       <td></td>
+    </tr>
+        </table>
+      </td>
     </tr>
   </table>
 </body>
