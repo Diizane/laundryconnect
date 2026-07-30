@@ -33,12 +33,25 @@ def _fixture_settings(**overrides) -> Settings:
 class TestParseManualPage:
     def test_fixture_manual_page(self) -> None:
         page = parse_manual_page((FIXTURES / "manual_page.html").read_bytes())
-        # Query strings (ids, search echoes) are stripped from stored paths.
-        assert page.literature_path == "/en/Model/Literature"
-        assert page.drawings_print_path == "/en/Manual/DrawingsPrint"
+        # Functional identifiers (ManualId/ModelId) are KEPT — the portal
+        # 500s without them (found by live validation). Search echoes
+        # (SearchString, SearchAction, Comment, show) are dropped.
+        assert page.literature_path == "/en/Model/Literature?ManualId=1001&ModelId=2002"
+        assert page.drawings_print_path == "/en/Manual/DrawingsPrint?ManualId=1001&ModelId=2002"
         assert page.direct_pdf_paths == []
         # The fixture carries the observed "not available" message.
         assert page.drawings_available is False
+
+    def test_search_echo_parameters_never_stored(self) -> None:
+        page = parse_manual_page((FIXTURES / "manual_page.html").read_bytes())
+        for stored in (page.literature_path, page.drawings_print_path):
+            assert "SearchString" not in stored
+            assert "SearchAction" not in stored
+            assert "Comment" not in stored
+
+    def test_literature_link_without_query_keeps_bare_path(self) -> None:
+        body = b'<html><body><a href="/en/Model/Literature">Related Literature</a></body></html>'
+        assert parse_manual_page(body).literature_path == "/en/Model/Literature"
 
     def test_direct_pdf_links_captured_and_deduplicated(self) -> None:
         body = b"""

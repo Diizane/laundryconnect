@@ -14,7 +14,7 @@ Tolerant: missing/unrecognised structure yields empty results, not errors.
 
 import logging
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -24,12 +24,35 @@ _LITERATURE_PREFIX = "/en/Model/Literature"
 _DRAWINGS_PRINT_PREFIX = "/en/Manual/DrawingsPrint"
 _DOCUMENT_PREFIX = "/manuals/"
 
+# Intermediate-page links carry a mix of FUNCTIONAL parameters (the portal
+# 500s without ManualId/ModelId — found by live validation) and echo
+# parameters (SearchString, SearchAction, Comment, show…) that repeat the
+# operator's search input. Only the functional identifiers are kept; echoes
+# are never stored or logged. Document (/manuals/) links keep no query at
+# all — Phase 1 verified their only parameter is a cache-buster.
+_FUNCTIONAL_PARAMS = ("ManualId", "ModelId")
+
 
 def _clean_path(href: str) -> str:
     """Provider-relative path only — query strings (cache-busters, session
     echoes) are never kept or logged."""
     parsed = urlparse(href)
     return parsed.path
+
+
+def _functional_path(href: str) -> str:
+    """Provider-relative path plus ONLY the allowlisted functional query
+    parameters (catalog identifiers, not account or search data)."""
+    parsed = urlparse(href)
+    params = parse_qs(parsed.query)
+    kept = [
+        f"{name}={quote(params[name][0], safe='')}"
+        for name in _FUNCTIONAL_PARAMS
+        if params.get(name) and params[name][0]
+    ]
+    if not kept:
+        return parsed.path
+    return f"{parsed.path}?{'&'.join(kept)}"
 
 
 @dataclass
@@ -51,9 +74,9 @@ def parse_manual_page(body: bytes) -> ManualPage:
     for anchor in soup.find_all("a"):
         href = anchor.get("href") or ""
         if href.startswith(_LITERATURE_PREFIX) and page.literature_path is None:
-            page.literature_path = _clean_path(href)
+            page.literature_path = _functional_path(href)
         elif href.startswith(_DRAWINGS_PRINT_PREFIX) and page.drawings_print_path is None:
-            page.drawings_print_path = _clean_path(href)
+            page.drawings_print_path = _functional_path(href)
         elif _DOCUMENT_PREFIX in href and href.split("?", 1)[0].endswith(".pdf"):
             path = _clean_path(href)
             if path not in page.direct_pdf_paths:
@@ -87,6 +110,11 @@ def parse_literature_page(body: bytes) -> list[dict]:
 
     records: list[dict] = []
     for row in table.find_all("tr"):
+        if row.find("table") is not None:
+            # Production nests the document table inside outer layout tables
+            # (found by live validation): a wrapper row "contains" the whole
+            # inner table and would otherwise parse as one giant bogus record.
+            continue
         cells = row.find_all("td")
         if len(cells) < 4:
             continue  # header or layout row

@@ -91,7 +91,38 @@ mobile app.
   never followed), relative-path resolution, session-mode gates
   (missing session → `ReauthenticationRequired`; credential mode refused).
 
-## Live validation plan (manual only — NOT run in CI, NOT automated)
+## Live validation — PERFORMED 2026-07-30 ✅
+
+Executed under operator supervision (session re-bootstrapped by the operator
+first; the expired session en route exercised the reauth path against
+production — the real `ReturnUrl` login redirect was detected and surfaced
+as `ReauthenticationRequired`, as designed). Results, sanitised:
+
+1. **Discovery** (`/en/Manual` for the Phase 1 DR75 manual): **7 documents**
+   with correct metadata (4× Declaration of Conformity [DOC, 3+ languages],
+   Installation Operation Maintenance Mnl [Production], Parts Mnl
+   [PartsService], Technical Mnl [Production]) — matching the portal's own
+   "Found 7 documents" and the Phase 1 browser observation.
+2. **Document fetch** (D0568 Technical Mnl): 420,607 bytes — byte-for-byte
+   the Content-Length observed in the Phase 1 browser capture; `%PDF-`
+   magic validated.
+3. **Invalid-path probe**: real HTTP 404 → `DocumentNotFound` (resolving the
+   "404 behaviour unconfirmed" risk below — the portal does return a genuine
+   404 for unknown document paths).
+
+Two production-only defects were found and fixed during validation (the
+purpose of the exercise — both were invisible to reconstructed fixtures):
+
+- **Functional query parameters**: intermediate-page links require
+  `ManualId`/`ModelId` (the portal 500s without them). The parser now keeps
+  ONLY those allowlisted identifiers and still drops all search-echo
+  parameters; document paths remain fully query-stripped.
+- **Nested layout tables**: production wraps the document table in outer
+  layout tables; the wrapper row previously parsed as one giant bogus
+  record. Rows containing nested tables are now skipped, and the fixture
+  reproduces the nesting so the regression is pinned offline.
+
+### Original plan (for reference / future re-validation)
 
 One supervised operator session, mirroring the Phase 1 procedure:
 
