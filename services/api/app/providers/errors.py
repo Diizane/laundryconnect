@@ -38,6 +38,21 @@ class ProviderForbidden(ProviderError):
     retried or treated as a reauthentication loop."""
 
 
+class DocumentNotFound(ProviderError):
+    """The provider has no document at the requested location (HTTP 404 in
+    the document workflow). A domain outcome, not a transport failure —
+    callers can surface "document not found" to the technician instead of a
+    generic provider error."""
+
+
+class InvalidDocumentContent(ProviderError):
+    """The provider served something other than the expected document format
+    (wrong Content-Type, or a body that fails the format's magic-byte check
+    — e.g. an HTML page where a PDF was expected). Terminal; never retried.
+    The message carries only structural detail (declared content type),
+    never response content."""
+
+
 class LiveModeRefused(ProviderError):
     """A live provider mode was requested but is not permitted here.
 

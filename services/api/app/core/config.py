@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # Login is on portal.alliancels.net; parts/model search is on the Parts
     # Connection host pc.alliancels.net. Both are authorised (service partner).
     alliance_base_url: str = "https://portal.alliancels.net"
+    # Parts Connection base — provider-relative document-workflow paths
+    # (/en/Manual, /en/Model/Literature, /manuals/...) resolve against this.
+    alliance_parts_base_url: str = "https://pc.alliancels.net"
     alliance_allowed_hosts: str = "portal.alliancels.net,pc.alliancels.net"
     # Full search URL template ({query} is URL-encoded and substituted).
     alliance_search_url: str = (

@@ -21,7 +21,13 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 
 from app.providers.alliance.ratelimit import RateLimiter
-from app.providers.errors import ProviderError, ProviderForbidden, ReauthenticationRequired
+from app.providers.errors import (
+    DocumentNotFound,
+    InvalidDocumentContent,
+    ProviderError,
+    ProviderForbidden,
+    ReauthenticationRequired,
+)
 from app.providers.models import QueryType
 
 logger = logging.getLogger(__name__)
@@ -42,12 +48,41 @@ _FIELDS_BY_QUERY_TYPE: dict[QueryType, tuple[str, ...]] = {
 class AllianceTransport(Protocol):
     async def search_raw(self, query: str, query_type: QueryType) -> list[dict]: ...
 
+    # Document workflow (Milestone 9): one bounded intermediate page fetch,
+    # one validated document fetch. Implementations never crawl.
+    async def fetch_page(self, url: str) -> bytes: ...
+
+    async def fetch_document(self, url: str) -> bytes: ...
+
 
 class FixtureTransport:
-    """Serves sanitised fixture records; no network access."""
+    """Serves sanitised fixture records and pages; no network access.
+
+    The document workflow serves reconstructed, sanitised HTML fixtures so
+    fixture mode exercises the REAL page parsers end-to-end, mirroring the
+    live traversal without any network request.
+    """
 
     def __init__(self, fixtures_dir: Path = _FIXTURES_DIR) -> None:
+        self._fixtures_dir = fixtures_dir
         self._records = json.loads((fixtures_dir / "search.json").read_text())["records"]
+
+    async def fetch_page(self, url: str) -> bytes:
+        path = urlparse(url).path
+        if path.startswith("/en/Model/Literature"):
+            return (self._fixtures_dir / "literature_page.html").read_bytes()
+        if path.startswith("/en/Manual"):
+            return (self._fixtures_dir / "manual_page.html").read_bytes()
+        raise DocumentNotFound("no fixture page for this path")
+
+    async def fetch_document(self, url: str) -> bytes:
+        path = urlparse(url).path
+        if not (path.startswith("/manuals/") and path.endswith(".pdf")):
+            raise DocumentNotFound("no fixture document at this path")
+        body = (self._fixtures_dir / "document.pdf").read_bytes()
+        if not body.startswith(b"%PDF-"):  # same guarantee as the live path
+            raise InvalidDocumentContent("fixture document is not a PDF")
+        return body
 
     async def search_raw(self, query: str, query_type: QueryType) -> list[dict]:
         needle = query.strip().lower()
@@ -118,6 +153,8 @@ _TERMINAL = (
     HostNotAllowed,
     InvalidProviderURL,
     UnexpectedRedirect,
+    DocumentNotFound,
+    InvalidDocumentContent,
     LiveFetchError,
 )
 _RETRYABLE_STATUS = frozenset({500, 502, 503, 504})
@@ -228,13 +265,31 @@ class SessionTransport:
         return default
 
     def _is_login_redirect(self, response: StreamResponse) -> bool:
+        """A redirect that means "session expired, go log in". Two observed
+        forms: a /login path, and (Phase 1, document workflow) a redirect to
+        the site root carrying a ReturnUrl parameter
+        (`Location: /?ReturnUrl=<original path>`)."""
         if response.status_code not in _REDIRECT_STATUS:
             return False
         try:
-            location = str(response.headers.get("location", ""))
+            location = str(response.headers.get("location", "")).lower()
         except Exception:
             return False
-        return "/login" in location.lower()
+        return "/login" in location or "returnurl=" in location
+
+    def _check_content_type(self, response: StreamResponse, expected: str) -> None:
+        """Require the declared Content-Type (media type only; parameters
+        such as charset ignored). The error message carries the declared
+        media type — a structural header value, never response content."""
+        try:
+            raw = str(response.headers.get("content-type", "") or "")
+        except Exception:
+            raw = ""
+        media_type = raw.split(";", 1)[0].strip().lower()
+        if media_type != expected:
+            raise InvalidDocumentContent(
+                f"expected content type '{expected}', got '{media_type or 'unknown'}'"
+            )
 
     def _check_declared_size(self, response: StreamResponse, max_bytes: int) -> None:
         try:
@@ -249,19 +304,44 @@ class SessionTransport:
         except (TypeError, ValueError):
             pass  # malformed header — fall back to the streaming cap
 
-    async def _read_capped(self, response: StreamResponse, max_bytes: int) -> bytes:
+    async def _read_capped(
+        self, response: StreamResponse, max_bytes: int, magic: bytes | None = None
+    ) -> bytes:
         """Accumulate the body incrementally; abort the instant the cap is
-        exceeded (raising exits the `async with`, closing the stream)."""
+        exceeded (raising exits the `async with`, closing the stream). When
+        `magic` is given, the leading bytes are checked as soon as enough
+        have arrived — a mislabelled non-document aborts the download early
+        instead of streaming to the cap."""
         buffer = bytearray()
+        magic_checked = magic is None
         async for chunk in response.aiter_bytes(_CHUNK_SIZE):
             buffer += chunk
+            if not magic_checked and len(buffer) >= len(magic):
+                if not bytes(buffer[: len(magic)]) == magic:
+                    raise InvalidDocumentContent("document body does not match expected format")
+                magic_checked = True
             if len(buffer) > max_bytes:
                 raise ResponseTooLarge(f"streamed body exceeded {max_bytes} bytes")
+        if not magic_checked:  # body ended before enough bytes for the check
+            raise InvalidDocumentContent("document body does not match expected format")
         return bytes(buffer)
 
-    async def _fetch(self, url: str, max_bytes: int) -> bytes:
+    async def _fetch(
+        self,
+        url: str,
+        max_bytes: int,
+        *,
+        map_404: bool = False,
+        require_pdf: bool = False,
+    ) -> bytes:
         """Fetch a URL as bounded bytes, streaming. Each attempt opens a
-        fresh stream — a consumed/aborted response is never reused."""
+        fresh stream — a consumed/aborted response is never reused.
+
+        Document-workflow options: `map_404` turns HTTP 404 into the domain
+        `DocumentNotFound` (terminal); `require_pdf` enforces
+        `Content-Type: application/pdf` before the body is read AND a
+        `%PDF-` magic-byte check on the leading bytes (terminal
+        `InvalidDocumentContent` on either failure)."""
         self._check_url(url)
         async with self._semaphore:  # single-flight concurrency cap
             last_exc: Exception | None = None
@@ -299,14 +379,23 @@ class SessionTransport:
                                 await self._sleep(self._retry_after_seconds(response, attempt))
                                 continue
                             raise LiveFetchError("provider rate-limited (429) after retries")
+                        if status == 404 and map_404:
+                            raise DocumentNotFound("provider has no document at this location")
                         if status in _RETRYABLE_STATUS and attempt < self._max_retries:
                             await self._sleep(0.5 * (2**attempt))
                             continue
                         if status >= 400:
                             raise LiveFetchError(f"provider returned status {status}")
-                        # 2xx: enforce the cap before and during the read.
+                        # 2xx: validate the declared type before reading any
+                        # body bytes, then enforce the cap before and during
+                        # the read (with the magic-byte check on the leading
+                        # bytes when a PDF is required).
+                        if require_pdf:
+                            self._check_content_type(response, "application/pdf")
                         self._check_declared_size(response, max_bytes)
-                        return await self._read_capped(response, max_bytes)
+                        return await self._read_capped(
+                            response, max_bytes, magic=b"%PDF-" if require_pdf else None
+                        )
                 except _TERMINAL:
                     raise  # never retried
                 except Exception as exc:  # transport-level (timeout, connection)
@@ -341,11 +430,21 @@ class SessionTransport:
         Applies every safeguard; never parses."""
         return await self._fetch(self._search_url(query), self._max_response_bytes)
 
+    async def fetch_page(self, url: str) -> bytes:
+        """Fetch ONE intermediate HTML page of the bounded document workflow
+        (`/en/Manual` menu or `/en/Model/Literature` list), under the search
+        size cap. Every transport safeguard applies; 404 maps to
+        `DocumentNotFound`. Callers never follow links beyond the observed
+        two-page traversal (Milestone 9 Phase 1 findings)."""
+        return await self._fetch(url, self._max_response_bytes, map_404=True)
+
     async def fetch_document(self, url: str) -> bytes:
-        """Download a single document (e.g. a PDF), streamed under the 100 MB
-        cap. Host-allowlisted; no unbounded transfer into memory; no
-        crawling."""
-        return await self._fetch(url, self._max_document_bytes)
+        """Download a single validated PDF, streamed under the 100 MB cap.
+        Host-allowlisted; `Content-Type: application/pdf` enforced before the
+        body is read; leading bytes must be `%PDF-` (early abort otherwise);
+        404 maps to `DocumentNotFound`. No unbounded transfer into memory;
+        no crawling."""
+        return await self._fetch(url, self._max_document_bytes, map_404=True, require_pdf=True)
 
 
 def parse_json_records(body: bytes) -> list[dict]:

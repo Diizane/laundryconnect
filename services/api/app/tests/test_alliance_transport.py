@@ -16,7 +16,11 @@ from app.providers.alliance.transport import (
     SessionTransport,
     UnexpectedRedirect,
 )
-from app.providers.errors import ReauthenticationRequired
+from app.providers.errors import (
+    DocumentNotFound,
+    InvalidDocumentContent,
+    ReauthenticationRequired,
+)
 from app.providers.models import QueryType
 
 ALLOWED = ["portal.alliancels.net"]
@@ -31,6 +35,7 @@ class FakeStreamResponse:
         location: str = "",
         content_length: int | None = None,
         retry_after: str | None = None,
+        content_type: str | None = None,
     ) -> None:
         self.status_code = status_code
         self._chunks = chunks if chunks is not None else [b'{"records": []}']
@@ -43,6 +48,8 @@ class FakeStreamResponse:
             self.headers["content-length"] = str(content_length)
         if retry_after is not None:
             self.headers["retry-after"] = retry_after
+        if content_type is not None:
+            self.headers["content-type"] = content_type
 
     async def aiter_bytes(self, chunk_size: int = 65536) -> AsyncIterator[bytes]:
         for chunk in self._chunks:
@@ -309,8 +316,10 @@ class TestStreamingSizeCaps:
         assert response.closed is True
 
     async def test_document_streaming_cap_enforced(self) -> None:
-        chunks = [b"x" * 1_000_000 for _ in range(10)]
-        response = FakeStreamResponse(200, chunks=chunks)
+        # A genuine PDF stream (correct type and magic) that exceeds the cap
+        # must still be aborted mid-stream.
+        chunks = [b"%PDF-1.4" + b"x" * 1_000_000] + [b"x" * 1_000_000 for _ in range(9)]
+        response = FakeStreamResponse(200, chunks=chunks, content_type="application/pdf")
         client = FakeStreamClient([response])
         transport = _transport(client, max_document_bytes=3_000_000)
         with pytest.raises(ResponseTooLarge):
@@ -319,16 +328,137 @@ class TestStreamingSizeCaps:
 
 
 class TestFetchDocument:
-    async def test_download_returns_bytes(self) -> None:
+    async def test_download_returns_validated_pdf_bytes(self) -> None:
         pdf = b"%PDF-1.4 ...bytes..."
-        client = FakeStreamClient([FakeStreamResponse(200, chunks=[pdf])])
+        client = FakeStreamClient(
+            [FakeStreamResponse(200, chunks=[pdf], content_type="application/pdf")]
+        )
         url = "https://portal.alliancels.net/s/document/ALS-SC60-SVC"
+        assert await _transport(client).fetch_document(url) == pdf
+
+    async def test_content_type_with_charset_parameter_accepted(self) -> None:
+        pdf = b"%PDF-1.7 body"
+        client = FakeStreamClient(
+            [FakeStreamResponse(200, chunks=[pdf], content_type="application/pdf; charset=utf-8")]
+        )
+        url = "https://portal.alliancels.net/s/document/x"
         assert await _transport(client).fetch_document(url) == pdf
 
     async def test_download_host_allowlisted(self) -> None:
         client = FakeStreamClient([FakeStreamResponse(200, chunks=[b"x"])])
         with pytest.raises(HostNotAllowed):
             await _transport(client).fetch_document("https://cdn.evil.example/x.pdf")
+        assert client.requests == []
+
+    async def test_html_where_pdf_expected_rejected_before_body_read(self) -> None:
+        # An HTML page at the final fetch stage (wrong/expired/error page) is
+        # a terminal InvalidDocumentContent — and the body is NEVER read.
+        response = FakeStreamResponse(
+            200, chunks=[b"<html>login page</html>"], content_type="text/html; charset=utf-8"
+        )
+        client = FakeStreamClient([response, FakeStreamResponse(200)])
+        with pytest.raises(InvalidDocumentContent):
+            await _transport(client, max_retries=2).fetch_document(
+                "https://portal.alliancels.net/manuals/Production/D0100.pdf"
+            )
+        assert response.chunks_yielded == 0  # rejected on headers alone
+        assert len(client.requests) == 1  # terminal — never retried
+
+    async def test_missing_content_type_rejected(self) -> None:
+        response = FakeStreamResponse(200, chunks=[b"%PDF-1.4"])
+        client = FakeStreamClient([response])
+        with pytest.raises(InvalidDocumentContent):
+            await _transport(client).fetch_document("https://portal.alliancels.net/manuals/x.pdf")
+        assert response.chunks_yielded == 0
+
+    async def test_pdf_content_type_but_non_pdf_body_aborts_early(self) -> None:
+        # Misconfigured server: declares PDF, serves HTML. The magic-byte
+        # check aborts on the FIRST chunk instead of streaming to the cap.
+        chunks = [b"<html>not a pdf</html>"] + [b"x" * 1000 for _ in range(50)]
+        response = FakeStreamResponse(200, chunks=chunks, content_type="application/pdf")
+        client = FakeStreamClient([response])
+        with pytest.raises(InvalidDocumentContent):
+            await _transport(client).fetch_document("https://portal.alliancels.net/manuals/x.pdf")
+        assert response.chunks_yielded == 1  # aborted immediately
+        assert response.closed is True
+
+    async def test_body_shorter_than_magic_rejected(self) -> None:
+        response = FakeStreamResponse(200, chunks=[b"%P"], content_type="application/pdf")
+        client = FakeStreamClient([response])
+        with pytest.raises(InvalidDocumentContent):
+            await _transport(client).fetch_document("https://portal.alliancels.net/manuals/x.pdf")
+
+    async def test_404_maps_to_document_not_found_terminally(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(404), FakeStreamResponse(200)])
+        with pytest.raises(DocumentNotFound):
+            await _transport(client, max_retries=2).fetch_document(
+                "https://portal.alliancels.net/manuals/Production/D9999.pdf"
+            )
+        assert len(client.requests) == 1  # never retried
+
+    async def test_401_still_raises_reauthentication_required(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(401)])
+        with pytest.raises(ReauthenticationRequired):
+            await _transport(client).fetch_document("https://portal.alliancels.net/manuals/x.pdf")
+
+    async def test_login_redirect_still_raises_reauthentication_required(self) -> None:
+        # Phase 1 observed: unauthenticated document requests 302 to login.
+        response = FakeStreamResponse(
+            302, location="https://portal.alliancels.net/?ReturnUrl=%2fmanuals%2fx.pdf&login=1"
+        )
+        client = FakeStreamClient([response])
+        with pytest.raises(ReauthenticationRequired):
+            await _transport(client).fetch_document("https://portal.alliancels.net/manuals/x.pdf")
+
+    async def test_off_host_redirect_refused(self) -> None:
+        response = FakeStreamResponse(302, location="https://cdn.evil.example/x.pdf?sig=SECRET")
+        client = FakeStreamClient([response])
+        with pytest.raises(UnexpectedRedirect) as excinfo:
+            await _transport(client).fetch_document("https://portal.alliancels.net/manuals/x.pdf")
+        assert "SECRET" not in str(excinfo.value)
+
+    async def test_403_is_hard_stop(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(403), FakeStreamResponse(200)])
+        with pytest.raises(AccessForbidden):
+            await _transport(client, max_retries=2).fetch_document(
+                "https://portal.alliancels.net/manuals/x.pdf"
+            )
+        assert len(client.requests) == 1
+
+
+class TestFetchPage:
+    async def test_returns_html_bytes_without_content_validation(self) -> None:
+        html = b"<html><body>manual menu</body></html>"
+        client = FakeStreamClient([FakeStreamResponse(200, chunks=[html])])
+        url = "https://portal.alliancels.net/en/Manual?ManualId=1"
+        assert await _transport(client).fetch_page(url) == html
+
+    async def test_404_maps_to_document_not_found(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(404)])
+        with pytest.raises(DocumentNotFound):
+            await _transport(client).fetch_page("https://portal.alliancels.net/en/Manual?x=1")
+
+    async def test_search_404_is_still_a_generic_fetch_error(self) -> None:
+        # The 404 → DocumentNotFound mapping is document-workflow-only; the
+        # search path's contract is unchanged.
+        client = FakeStreamClient([FakeStreamResponse(404)])
+        with pytest.raises(LiveFetchError):
+            await _transport(client).search_raw("SC60", QueryType.AUTO)
+
+    async def test_page_size_cap_is_search_cap(self) -> None:
+        chunks = [b"x" * 1_000_000 for _ in range(10)]
+        response = FakeStreamResponse(200, chunks=chunks)
+        client = FakeStreamClient([response])
+        with pytest.raises(ResponseTooLarge):
+            await _transport(client, max_response_bytes=2_000_000).fetch_page(
+                "https://portal.alliancels.net/en/Manual?x=1"
+            )
+        assert 0 < response.chunks_yielded < 10
+
+    async def test_off_allowlist_page_refused(self) -> None:
+        client = FakeStreamClient([])
+        with pytest.raises(HostNotAllowed):
+            await _transport(client).fetch_page("https://evil.example/en/Manual")
         assert client.requests == []
 
 

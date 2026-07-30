@@ -67,6 +67,29 @@ class ProviderResult(BaseModel):
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class ProviderDocumentInfo(BaseModel):
+    """One document discovered through a provider's bounded document
+    workflow (Milestone 9). Carried through provider models only — never
+    persisted, never cached. `source_path` is the provider-internal path to
+    the document bytes; it is resolved and fetched by the backend and must
+    never be handed to a mobile client (the backend proxies the bytes)."""
+
+    provider_id: str
+    data_origin: DataOrigin
+    title: str
+    document_type: str | None = None
+    part_number: str | None = None
+    comment: str | None = None
+    languages: list[str] = Field(default_factory=list)
+    # Provider-side categorisation and filename, e.g. from
+    # /manuals/<category>/<filename>.pdf (query strings never included).
+    category: str | None = None
+    filename: str | None = None
+    source_path: str
+    # False when the provider lists the document without a downloadable file.
+    available: bool = True
+
+
 class ProviderHealth(BaseModel):
     status: Literal["ok", "failed"]
     detail: str | None = None
