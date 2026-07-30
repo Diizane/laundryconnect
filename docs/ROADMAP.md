@@ -133,10 +133,16 @@ pipeline.
   bounded traversal (max 2 HTML pages + 1 PDF). API decision settled:
   backend proxies document bytes. Full findings + Phase 2/3 requirements in
   `docs/MILESTONE_9/phase-1-document-discovery.md`.
-- Phase 2 — Secure transport: reuse existing safeguards, then verify
-  Content-Type before parsing; stream under size limits; reject off-host
-  documents and redirects; preserve timeout/retry; never log signed URLs or
-  session ids. (`fetch_document` size-cap + host-allowlist plumbing exists.)
+- [x] Phase 2 — Secure document retrieval (provider layer) — implemented,
+  pending review: bounded discovery (`discover_documents`, max 2 HTML pages,
+  structurally no crawling), `fetch_page`/hardened `fetch_document` on the
+  existing SessionTransport (Content-Type + `%PDF-` magic validated before
+  forwarding, 404 → `DocumentNotFound`, observed `ReturnUrl=` login redirect
+  → reauth), literature metadata via `ProviderDocumentInfo` (never
+  persisted), fixture-mode exercises the real parsers, 34 new offline tests.
+  ADR 0013; docs/MILESTONE_9/phase-2-document-retrieval.md (incl. manual
+  live-validation plan); supplementary portal observations recorded as
+  future roadmap inputs (docs/MILESTONE_9/supplementary-observations.md).
 - Phase 3 — API contract: decide proxy vs temporary internal download
   endpoint vs metadata-only; avoid exposing provider URLs directly without a
   strong reason.
