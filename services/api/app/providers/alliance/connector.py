@@ -22,12 +22,14 @@ from app.providers.alliance.config import (
     require_live_allowed,
     resolve_mode,
 )
+from app.providers.alliance.document_parser import parse_literature_page, parse_manual_page
 from app.providers.alliance.session import load_session
 from app.providers.alliance.transport import AllianceTransport, FixtureTransport
 from app.providers.base import ProviderConnector
 from app.providers.errors import LiveModeRefused
 from app.providers.models import (
     DataOrigin,
+    ProviderDocumentInfo,
     ProviderHealth,
     ProviderResult,
     QueryType,
@@ -87,6 +89,86 @@ class AllianceConnector(ProviderConnector):
         require_live_allowed(self._settings)
         transport = self._transport or self._build_session_transport()
         return await transport.search_raw(query, query_type)
+
+    # -- Document workflow (Milestone 9) -----------------------------------
+    #
+    # Bounded by design (Phase 1 findings, docs/MILESTONE_9): at most TWO
+    # intermediate HTML pages (/en/Manual menu → /en/Model/Literature list)
+    # then ONE validated PDF. Never crawls, never recurses, never follows
+    # links outside the observed workflow. Nothing is persisted or cached.
+
+    def _document_transport(self) -> AllianceTransport:
+        """The transport for document-workflow fetches, mode-gated exactly
+        like search: fixture serves local files; session validates the
+        session and the live gate first; credential mode is refused."""
+        if self._mode is AllianceMode.FIXTURE:
+            return self._transport or FixtureTransport()
+        if self._mode is AllianceMode.CREDENTIAL:
+            raise LiveModeRefused("automated credential login is not established as permitted")
+        load_session(self._settings.alliance_session_path)
+        require_live_allowed(self._settings)
+        return self._transport or self._build_session_transport()
+
+    def _resolve_path(self, path_or_url: str) -> str:
+        """Provider-relative paths resolve against the Parts Connection base;
+        absolute URLs pass through (the transport's URL policy and host
+        allowlist still apply to every fetch)."""
+        if path_or_url.startswith("https://") or path_or_url.startswith("http://"):
+            return path_or_url
+        return f"{self._settings.alliance_parts_base_url}{path_or_url}"
+
+    async def discover_documents(self, manual_path: str) -> list[ProviderDocumentInfo]:
+        """From a search result's `/en/Manual?...` link, list the documents
+        the provider offers for that model, with metadata. Fetches at most
+        two pages; returns metadata only (no document bytes, no persistence).
+        """
+        transport = self._document_transport()
+        manual = parse_manual_page(await transport.fetch_page(self._resolve_path(manual_path)))
+
+        records: list[dict] = [
+            {
+                "part_number": None,
+                "document_type": None,
+                "comment": None,
+                "languages": [],
+                "source_path": path,
+                "category": None,
+                "filename": path.rsplit("/", 1)[-1],
+                "available": True,
+                "title": path.rsplit("/", 1)[-1],
+            }
+            for path in manual.direct_pdf_paths
+        ]
+        if manual.literature_path:
+            literature_body = await transport.fetch_page(self._resolve_path(manual.literature_path))
+            records.extend(parse_literature_page(literature_body))
+        # Traversal ends here — never follow further links (bounded by design).
+
+        return [
+            ProviderDocumentInfo(
+                provider_id=self.provider_id,
+                data_origin=self.data_origin,
+                title=record["title"],
+                document_type=record["document_type"],
+                part_number=record["part_number"],
+                comment=record["comment"],
+                languages=record["languages"],
+                category=record["category"],
+                filename=record["filename"],
+                source_path=record["source_path"],
+                available=record["available"],
+            )
+            for record in records
+        ]
+
+    async def fetch_document(self, source_path: str) -> bytes:
+        """Fetch ONE document's bytes (validated PDF) via the transport. The
+        caller (Phase 3 API) streams these to the client; nothing is
+        persisted. Raises `DocumentNotFound` / `InvalidDocumentContent` /
+        `ReauthenticationRequired` / `ProviderForbidden` as domain outcomes.
+        """
+        transport = self._document_transport()
+        return await transport.fetch_document(self._resolve_path(source_path))
 
     def _build_session_transport(self) -> AllianceTransport:
         """Construct the authenticated live transport. Reached only after the
