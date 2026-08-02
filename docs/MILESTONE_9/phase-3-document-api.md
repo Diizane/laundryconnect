@@ -116,7 +116,37 @@ contract unchanged.
   the process (harmless: rediscovery re-mints them); production deployment
   must set the secret — noted in configuration comments.
 
-## Live validation plan (manual only, before the mobile milestone)
+## Live validation — PERFORMED 2026-08-02 ✅
+
+One supervised operator run of the real API (local uvicorn, session mode,
+fresh operator bootstrap, generated ≥32-char token secret). Results,
+sanitised:
+
+1. **Discovery** (`GET /providers/alliance/documents?ref=<known manual>`):
+   HTTP 200, **7 documents** (matching the Phase 2 validation and the
+   portal's own count) with correct metadata, `data_origin=live`, and a
+   token on every downloadable document.
+2. **Download** (D0568 Technical Mnl via its token): HTTP 200,
+   **420,607 bytes** — byte-for-byte the Phase 1 browser observation and
+   Phase 2 provider validation — `content-type: application/pdf`,
+   `content-disposition: inline; filename="D0568.pdf"`,
+   `cache-control: no-store`, body begins `%PDF-`.
+3. **Tampered token** (one character altered): generic
+   `404 {"code": "not_found", "message": "Document not found."}` — no hint
+   that the token (rather than the document) was the problem.
+4. **Leak scan**: the discovery JSON contains no Alliance hostname, path,
+   `ManualId`, `ModelId`, or `source_path`; base64-decoding all seven
+   issued tokens yields ciphertext only — no path, provider, filename, or
+   payload structure recoverable.
+
+Also exercised against production en route: the expired-session case — the
+API returned the leak-free 503 "Provider session requires reauthentication"
+(class name only in logs) before the operator re-bootstrapped. Operational
+note for the mobile milestone: portal sessions expire on the order of
+hours-to-days, so the reauthentication state will be a routine part of the
+technician experience and the operator re-bootstrap is its recovery path.
+
+### Original plan (for reference / future re-validation)
 
 One supervised operator run of the deployed/local API in session mode:
 discovery for a known model (expect the Phase 2-validated document list via
