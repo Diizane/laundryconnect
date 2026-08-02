@@ -4,11 +4,12 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.router import api_v1_router
+from app.core.auth import require_api_key, validate_auth_configuration
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
@@ -30,6 +31,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    # Refuse to start an unauthenticated API in production (the backend
+    # holds an authenticated provider session).
+    validate_auth_configuration(settings)
 
     app = FastAPI(
         title=settings.app_name,
@@ -61,7 +65,13 @@ def create_app() -> FastAPI:
         )
 
     register_exception_handlers(app)
-    app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+    # Every v1 route requires an API key when keys are configured; the
+    # dependency exempts health/liveness/readiness probes itself.
+    app.include_router(
+        api_v1_router,
+        prefix=settings.api_v1_prefix,
+        dependencies=[Depends(require_api_key)],
+    )
 
     @app.get("/", response_model=ApiMetadata, tags=["meta"])
     async def root() -> ApiMetadata:

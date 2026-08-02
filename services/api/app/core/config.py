@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed CORS origins (admin portal, dev tools).
     cors_origins: str = ""
 
+    # Shared API keys (comma-separated) protecting every non-health route.
+    # REQUIRED in production — the app refuses to start without them, since
+    # the backend holds an authenticated provider session. Generate with
+    # `python -c "import secrets; print(secrets.token_urlsafe(32))"` and
+    # store in the environment's secret manager. Empty in development/tests
+    # disables auth.
+    api_keys: str = ""
+
     # Comma-separated provider connector ids to enable (see
     # app/providers/registry.py). Only the mock connector exists so far;
     # production must configure this explicitly once real connectors land.
@@ -110,6 +118,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return _split_csv(self.cors_origins)
+
+    @property
+    def api_key_list(self) -> list[str]:
+        return _split_csv(self.api_keys)
 
     @property
     def enabled_provider_list(self) -> list[str]:
