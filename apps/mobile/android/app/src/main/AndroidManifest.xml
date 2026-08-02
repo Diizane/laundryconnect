@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app talks ONLY to the LaundryConnect backend (API_BASE_URL);
+         no provider host is ever contacted from the device. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="laundryconnect"
+        android:label="LaundryConnect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

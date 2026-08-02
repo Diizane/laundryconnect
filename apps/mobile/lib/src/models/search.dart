@@ -20,6 +20,7 @@ class SearchResult {
     this.partNumber,
     this.revision,
     this.sourceUrl,
+    this.metadata = const {},
     this.relevanceScore = 0,
   });
 
@@ -40,7 +41,26 @@ class SearchResult {
   final String? partNumber;
   final String? revision;
   final String? sourceUrl;
+
+  /// Provider-supplied metadata (string key/values). For Alliance model
+  /// results this carries the catalog identifiers used to build the
+  /// document-discovery reference.
+  final Map<String, String> metadata;
   final double relevanceScore;
+
+  /// The reference this result's documents can be discovered with, or null
+  /// when the result has none. The value is only ever sent back to the
+  /// LaundryConnect backend — never to a provider.
+  String? get documentRef {
+    if (providerId == 'alliance') {
+      final manualId = metadata['manual_id'];
+      final modelId = metadata['model_id'];
+      if (manualId != null && modelId != null) return '$manualId:$modelId';
+      return null;
+    }
+    if (providerId == 'mock') return sourceReference;
+    return null;
+  }
 
   factory SearchResult.fromJson(Map<String, dynamic> json) => SearchResult(
     providerId: json['provider_id'] as String,
@@ -57,6 +77,11 @@ class SearchResult {
     partNumber: json['part_number'] as String?,
     revision: json['revision'] as String?,
     sourceUrl: json['source_url'] as String?,
+    metadata:
+        (json['metadata'] as Map<String, dynamic>?)?.map(
+          (key, value) => MapEntry(key, value.toString()),
+        ) ??
+        const {},
     relevanceScore: (json['relevance_score'] as num?)?.toDouble() ?? 0,
   );
 }

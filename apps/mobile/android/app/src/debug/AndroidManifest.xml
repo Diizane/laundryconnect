@@ -4,4 +4,10 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- DEBUG BUILDS ONLY: cleartext HTTP is required for internal testing
+         against a local/LAN backend (http://10.0.2.2:8000 on the emulator,
+         http://<host-ip>:8000 on a device). Release builds do NOT permit
+         cleartext — an HTTPS staging/production backend is required there. -->
+    <application android:usesCleartextTraffic="true" tools:node="merge"
+        xmlns:tools="http://schemas.android.com/tools"/>
 </manifest>

@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:laundryconnect/src/api/api_client.dart';
 import 'package:laundryconnect/src/models/document_search.dart';
 import 'package:laundryconnect/src/models/machine.dart';
+import 'package:laundryconnect/src/models/provider_documents.dart';
 import 'package:laundryconnect/src/models/search.dart';
 import 'package:laundryconnect/src/storage/workspace_store.dart';
 
@@ -132,6 +135,66 @@ class FakeDocumentsApi implements DocumentsApi {
         textSource: 'seeded_sample',
       ),
     );
+  }
+}
+
+final samplePdfBytes = Uint8List.fromList('%PDF-1.4 fake'.codeUnits);
+
+DocumentDiscovery sampleDiscovery({String tokenSuffix = ''}) =>
+    DocumentDiscovery(
+      providerId: 'alliance',
+      documents: [
+        ProviderDocument(
+          token: 'token-technical$tokenSuffix',
+          title: 'D0568 — Technical Mnl',
+          documentType: 'Technical Mnl',
+          partNumber: 'D0568',
+          comment: 'Date 9/99',
+          languages: const ['English'],
+          category: 'Production',
+          filename: 'D0568.pdf',
+          available: true,
+          dataOrigin: 'fixture',
+        ),
+        const ProviderDocument(
+          token: null,
+          title: 'D0300 — Legacy Bulletin',
+          documentType: 'Bulletin',
+          partNumber: 'D0300',
+          comment: 'Printed only',
+          languages: ['English'],
+          category: null,
+          filename: null,
+          available: false,
+          dataOrigin: 'fixture',
+        ),
+      ],
+    );
+
+class FakeProviderDocumentsApi implements ProviderDocumentsApi {
+  FakeProviderDocumentsApi({this.discoverHandler, this.downloadHandler});
+
+  Future<DocumentDiscovery> Function(String providerId, String ref)?
+  discoverHandler;
+  Future<Uint8List> Function(String providerId, String token)? downloadHandler;
+
+  final discoverCalls = <String>[];
+  final downloadCalls = <String>[];
+
+  @override
+  Future<DocumentDiscovery> discoverDocuments(String providerId, String ref) {
+    discoverCalls.add(ref);
+    final handler = discoverHandler;
+    if (handler != null) return handler(providerId, ref);
+    return Future.value(sampleDiscovery());
+  }
+
+  @override
+  Future<Uint8List> downloadDocument(String providerId, String token) {
+    downloadCalls.add(token);
+    final handler = downloadHandler;
+    if (handler != null) return handler(providerId, token);
+    return Future.value(samplePdfBytes);
   }
 }
 
