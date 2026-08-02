@@ -43,7 +43,9 @@ enabled; 502 provider forbidden / invalid content / transient failure.
 client → GET documents?ref → route → registry → connector.discover_documents(ref)
                                   ← metadata            (strict ref validation,
              mint token per available doc                bounded 2-page traversal)
-client → GET documents/{token} → verify+decode token (HMAC, provider-bound)
+client → GET documents/{token} → Fernet decrypt-and-validate
+                                  (authenticated, TTL + issued-at checked,
+                                   provider-bound)
                                 → connector.fetch_document(source_path)
                                   (path-shape validation → live gates →
                                    allowlist → streamed under cap →
@@ -63,11 +65,16 @@ mock-first defaults, Alliance opt-in gates.
 - **No client URL/path input surface**: discovery takes a charset/length-
   constrained ref that the provider re-validates strictly (digits-only for
   Alliance; URL/path shapes are rejected at the API surface with 422);
-  download takes only a signed token. SSRF surface: none.
-- **Tokens fail closed**: tampered/malformed/wrong-version/wrong-provider
-  → 404, indistinguishable from a missing document; constant-time HMAC
-  comparison; payload carries only (provider id, provider-local path).
-- **Defense in depth at fetch time**: even a validly-signed path must match
+  download takes only an authenticated-encrypted token. SSRF surface: none.
+- **Tokens are confidential and fail closed**: the ciphertext contains the
+  encrypted provider binding and source reference — nothing is recoverable
+  by decoding (tested). Fernet decrypt-and-validate enforces authenticity
+  plus issued-at/TTL; malformed, tampered, expired, future-issued,
+  wrong-secret and wrong-provider tokens all → the same 404,
+  indistinguishable from a missing document. Production refuses token
+  operations (503) without a valid configured secret.
+- **Defense in depth at fetch time**: even a successfully decrypted path
+  must match
   the provider's document-path pattern (`/manuals/<seg>/<file>.pdf`,
   dot-only segments impossible), then pass the live gates, host allowlist,
   URL policy, rate limits, size caps, and Content-Type + `%PDF-` validation.
@@ -80,7 +87,7 @@ mock-first defaults, Alliance opt-in gates.
 
 ## Test summary
 
-**365 backend tests passing (48 new)**, all offline; mobile analyze clean +
+**368 backend tests passing (51 new)**, all offline; mobile analyze clean +
 33 mobile tests passing. New coverage: token round-trip/opacity/tampered/
 malformed/wrong-provider/wrong-secret/ephemeral-secret; discovery schema and
 metadata; unavailable documents carry no token; no-provider-internals marker

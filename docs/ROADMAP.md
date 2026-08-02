@@ -153,7 +153,7 @@ pipeline.
   fail-closed (tampering/expiry ≡ 404); no client URL/path input surface;
   provider-agnostic contract with mock fixture documents as default;
   deliberate leak-free error mapping (404/400/502/503). ADR 0014;
-  docs/MILESTONE_9/phase-3-document-api.md. 365 backend tests (48 new),
+  docs/MILESTONE_9/phase-3-document-api.md. 368 backend tests (51 new),
   offline.
 - Phase 4 — Persistence: keep current behaviour — no document persistence,
   no caching, no background downloads (each a separate future milestone if

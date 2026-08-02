@@ -1,4 +1,4 @@
-# 0014 — Document API: backend proxy with signed opaque tokens
+# 0014 — Document API: backend proxy with encrypted opaque tokens
 
 Date: 2026-07-30
 Status: accepted
@@ -54,6 +54,12 @@ derived from `DOCUMENT_TOKEN_SECRET` with **HKDF-SHA256**.
   operations **refuse with 503** — the API never silently degrades to an
   ephemeral process secret. The ephemeral fallback exists only for
   development and tests (tokens then die with the process; harmless).
+- **Secret quality**: the 32-character minimum is a floor, not a recipe —
+  a production `DOCUMENT_TOKEN_SECRET` must be generated from a
+  cryptographically secure random source (e.g. `openssl rand -base64 48`
+  or `python -c "import secrets; print(secrets.token_urlsafe(48))"`), never
+  a repeated/predictable string, and stored in the environment's secret
+  manager — not in the repository, an image, or a plain config file.
 - **Everything fails closed identically**: malformed, truncated, tampered,
   expired, future-issued, wrong-secret and wrong-provider tokens all
   produce the same **404**, indistinguishable from a missing document
@@ -67,7 +73,7 @@ derived from `DOCUMENT_TOKEN_SECRET` with **HKDF-SHA256**.
 - Discovery input is a short `ref` (charset/length-constrained at the API,
   then strictly validated by the provider — Alliance accepts only
   `<digits>:<digits>` and builds its `/en/Manual` URL server-side).
-- Download input is only the signed token; the provider additionally
+- Download input is only the encrypted token; the provider additionally
   validates the decoded path shape (Alliance: `/manuals/<seg>/<file>.pdf`,
   segments starting alphanumeric so `..` cannot match) before any fetch.
 - Clients therefore cannot submit URLs or paths at all — SSRF surface: none.
