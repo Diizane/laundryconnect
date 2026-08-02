@@ -7,6 +7,7 @@ import '../storage/workspace_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/result_card.dart';
 import 'machine_workspace_screen.dart';
+import 'provider_documents_screen.dart';
 
 /// Home screen: universal search bar first, results below on the same
 /// screen — a technician standing at a machine gets from launch to answer
@@ -17,12 +18,14 @@ class HomeSearchScreen extends StatefulWidget {
     required this.searchApi,
     required this.machinesApi,
     required this.documentsApi,
+    required this.providerDocumentsApi,
     required this.store,
   });
 
   final SearchApi searchApi;
   final MachinesApi machinesApi;
   final DocumentsApi documentsApi;
+  final ProviderDocumentsApi providerDocumentsApi;
   final WorkspaceStore store;
 
   @override
@@ -101,6 +104,19 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
     }
   }
 
+  /// Open the provider document list for a result (Milestone 10 flow:
+  /// search → select result → documents → PDF).
+  Future<void> _openDocumentsForResult(SearchResult result) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProviderDocumentsScreen(
+          result: result,
+          api: widget.providerDocumentsApi,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openWorkspace(MachineSummary machine) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -156,6 +172,7 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
       _Loaded(:final response) => _ResultsView(
         response: response,
         onResultTap: _openWorkspaceForResult,
+        onDocumentsTap: _openDocumentsForResult,
       ),
     };
   }
@@ -305,7 +322,13 @@ class _ErrorView extends StatelessWidget {
 }
 
 class _ResultsView extends StatelessWidget {
-  const _ResultsView({required this.response, required this.onResultTap});
+  const _ResultsView({
+    required this.response,
+    required this.onResultTap,
+    required this.onDocumentsTap,
+  });
+
+  final void Function(SearchResult) onDocumentsTap;
 
   final SearchResponse response;
   final void Function(SearchResult) onResultTap;
@@ -334,6 +357,9 @@ class _ResultsView extends StatelessWidget {
               child: ResultCard(
                 result: result,
                 onTap: () => onResultTap(result),
+                onDocuments: result.documentRef != null
+                    ? () => onDocumentsTap(result)
+                    : null,
               ),
             ),
         ],

@@ -4,11 +4,19 @@ import '../models/search.dart';
 import 'badges.dart';
 
 /// One search result: title, description, and scannable metadata badges.
+/// When [onDocuments] is provided a trailing button opens the provider's
+/// document list for this result (Milestone 10).
 class ResultCard extends StatelessWidget {
-  const ResultCard({super.key, required this.result, this.onTap});
+  const ResultCard({
+    super.key,
+    required this.result,
+    this.onTap,
+    this.onDocuments,
+  });
 
   final SearchResult result;
   final VoidCallback? onTap;
+  final VoidCallback? onDocuments;
 
   IconData get _icon => switch (result.resultType) {
     'document' => Icons.menu_book_outlined,
@@ -65,6 +73,13 @@ class ResultCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onDocuments != null)
+                IconButton(
+                  tooltip: 'Documents',
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  color: theme.colorScheme.primary,
+                  onPressed: onDocuments,
+                ),
             ],
           ),
         ),

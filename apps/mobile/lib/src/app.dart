@@ -11,16 +11,20 @@ class LaundryConnectApp extends StatelessWidget {
     SearchApi? searchApi,
     MachinesApi? machinesApi,
     DocumentsApi? documentsApi,
+    ProviderDocumentsApi? providerDocumentsApi,
     WorkspaceStore? store,
   }) : searchApi = searchApi ?? HttpSearchApi(),
        machinesApi = machinesApi ?? HttpMachinesApi(),
        documentsApi = documentsApi ?? HttpDocumentsApi(),
+       providerDocumentsApi =
+           providerDocumentsApi ?? HttpProviderDocumentsApi(),
        store = store ?? SharedPrefsWorkspaceStore();
 
   /// Injectable for widget tests; defaults to the real backend clients.
   final SearchApi searchApi;
   final MachinesApi machinesApi;
   final DocumentsApi documentsApi;
+  final ProviderDocumentsApi providerDocumentsApi;
   final WorkspaceStore store;
 
   @override
@@ -33,6 +37,7 @@ class LaundryConnectApp extends StatelessWidget {
         searchApi: searchApi,
         machinesApi: machinesApi,
         documentsApi: documentsApi,
+        providerDocumentsApi: providerDocumentsApi,
         store: store,
       ),
     );
