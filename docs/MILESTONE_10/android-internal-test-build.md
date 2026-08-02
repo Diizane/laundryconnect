@@ -1,8 +1,53 @@
 # Milestone 10 — First Android internal test build
 
-Status: implemented — pending review. Flutter/mobile + test-environment
-configuration only; the Phase 3 backend API, provider transport, parsers,
-and token handling are untouched.
+Status: implemented and smoke-tested on an emulator — pending review.
+Flutter/mobile + test-environment configuration only; the Phase 3 backend
+API, provider transport, parsers, and token handling are untouched.
+
+## Built artifact (2026-08-02)
+
+- File: `apps/mobile/build/app/outputs/flutter-apk/app-debug.apk`
+  (debug/internal-testing build; NOT committed to git)
+- Size: 149,102,875 bytes (~149 MB — debug builds bundle all ABIs and the
+  debug runtime; the release build of the same code is 50.6 MB)
+- SHA-256:
+  `45ba84133fd28a558b46c7630434b66deaf64ec325f9d2e4442a6e62fc2c1765`
+- Package: `au.com.laundryconnect.laundryconnect` v0.1.0 (versionCode 1)
+- Label: LaundryConnect · minSdk 24 (Android 7.0) · targetSdk 36
+- Toolchain: Flutter 3.44.7 · OpenJDK 17.0.20 (Homebrew) · Android SDK
+  platform 36, build-tools 36.0.0, platform-tools 37.0.1 (command-line
+  tools; no IDE), all licences accepted
+- Build command:
+  `flutter build apk --debug` (from `apps/mobile`; add
+  `--dart-define=API_BASE_URL=…` to target a non-default backend)
+- Install: `adb install -r app-debug.apk`
+- Smoke-tested on: emulator AVD (Pixel 7 profile), Android 16 / API 36,
+  arm64 — mock-mode backend at the default `http://10.0.2.2:8000`.
+
+### Cleartext isolation (verified empirically on both APKs)
+
+`android:usesCleartextTraffic="true"` exists ONLY in
+`android/app/src/debug/AndroidManifest.xml`, so plain-HTTP backends
+(emulator/LAN internal testing) work in debug builds only. `aapt dump
+xmltree` confirms the flag is present in `app-debug.apk` and **absent** in
+`app-release.apk` — release/staging builds therefore reject cleartext by
+Android default and require an HTTPS backend. The release APK was built
+solely for this verification and is not distributed.
+
+### Secrets scan (passed)
+
+The unpacked debug APK contains none of: Alliance hostnames, credentials,
+account identifiers, session/storage-state JSON, cookies,
+`DOCUMENT_TOKEN_SECRET`, `.env` files, or provider PDFs. The only
+backend-related string is the documented emulator default
+`http://10.0.2.2:8000` (a `--dart-define` default, not a provider URL).
+
+### Known limitation — in-memory PDF viewer
+
+The current viewer loads the complete validated PDF into Dart memory.
+This is appropriate for the first internal build and observed document
+sizes, but large field manuals may require a temporary-file or
+streamed-rendering design in a future milestone.
 
 ## What the build does
 
