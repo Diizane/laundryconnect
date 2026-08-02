@@ -132,6 +132,75 @@ void main() {
       expect(discovery.groups.single.documentType, 'Other');
     });
 
+    test('non-English documents are hidden, multi-language ones kept', () {
+      ProviderDocument doc(String part, List<String> languages) =>
+          ProviderDocument(
+            token: 'token-$part',
+            title: part,
+            documentType: 'Technical Mnl',
+            partNumber: part,
+            languages: languages,
+            available: true,
+            dataOrigin: 'live',
+          );
+      final discovery = DocumentDiscovery(
+        providerId: 'alliance',
+        documents: [
+          doc('english-only', ['English']),
+          // Multi-language file that includes English — usable, so kept.
+          doc('multi', ['English', 'česky', 'Dansk']),
+          doc('german-only', ['Deutsch']),
+          doc('czech-only', ['česky', 'Polski']),
+          doc('unlisted', const []), // unclassified: shown, never hidden
+        ],
+      );
+
+      expect(discovery.englishDocuments.map((d) => d.partNumber), [
+        'english-only',
+        'multi',
+        'unlisted',
+      ]);
+      expect(discovery.hiddenNonEnglishCount, 2);
+    });
+
+    test('English matching tolerates provider spelling and case', () {
+      for (final language in ['English', 'english', ' EN ', 'English CE']) {
+        final doc = ProviderDocument(
+          token: 't',
+          title: 'x',
+          languages: [language],
+          available: true,
+          dataOrigin: 'live',
+        );
+        expect(doc.isEnglish, isTrue, reason: language);
+      }
+    });
+
+    test('groups only contain English documents', () {
+      final discovery = DocumentDiscovery(
+        providerId: 'alliance',
+        documents: [
+          const ProviderDocument(
+            token: 't1',
+            title: 'EN manual',
+            documentType: 'Technical Mnl',
+            languages: ['English'],
+            available: true,
+            dataOrigin: 'live',
+          ),
+          const ProviderDocument(
+            token: 't2',
+            title: 'DE manual',
+            documentType: 'Wiring Diagram',
+            languages: ['Deutsch'],
+            available: true,
+            dataOrigin: 'live',
+          ),
+        ],
+      );
+      expect(discovery.groups.map((g) => g.documentType), ['Technical Mnl']);
+    });
+
     test('downloadable count excludes unavailable documents', () {
       final group = sampleDiscovery().groups.firstWhere(
         (g) => g.documentType == 'Bulletin',
@@ -221,6 +290,43 @@ void main() {
         find.text('No documents listed for this machine.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('all-non-English discovery says so distinctly', (tester) async {
+      final api = FakeProviderDocumentsApi(
+        discoverHandler: (_, _) async => const DocumentDiscovery(
+          providerId: 'alliance',
+          documents: [
+            ProviderDocument(
+              token: 't',
+              title: 'Betriebsanleitung',
+              documentType: 'Technical Mnl',
+              languages: ['Deutsch'],
+              available: true,
+              dataOrigin: 'live',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(_screen(api));
+      await tester.pumpAndSettle();
+
+      // Distinct from "no documents" — the machine has documents, just none
+      // this technician can read.
+      expect(
+        find.text('No English documents listed for this machine.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('language badge is not shown on rows', (tester) async {
+      await tester.pumpWidget(_screen(FakeProviderDocumentsApi()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Technical Mnl'));
+      await tester.pumpAndSettle();
+
+      // Every row is English now, so the badge would be pure repetition.
+      expect(find.text('English'), findsNothing);
     });
 
     testWidgets('discovery failure shows message and retry works', (
