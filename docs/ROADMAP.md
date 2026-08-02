@@ -160,15 +160,33 @@ but was reviewed and tested independently of the validated search pipeline.
   no caching, no background downloads (each a separate future milestone if
   ever needed).
 
-## Milestone 10 — First Android internal test build
+## Milestone 10 — First Android internal test build ✅
 
-Produce an installable Android APK exercising the validated technician
-flow against the stable Phase 3 backend API: search → select Alliance
-result → discover documents → select manual → open/read PDF. Flutter/
-mobile work and test-environment configuration only — no provider
-transport, parsing, token, or API endpoint changes. Mock mode stays usable
-for emulator/widget tests; no live calls in CI; debug/internal-testing APK
-only (no Play Store).
+Complete (2026-08-02, tagged **v0.1.0 Internal Alpha**): installable debug
+APK exercising the full technician flow against the Phase 3 backend —
+search → result → document discovery (metadata list, disabled
+unavailables) → backend PDF proxy via opaque tokens → in-memory in-app
+viewer. Emulator smoke test passed with mock-only data; secrets scan
+clean; cleartext HTTP isolated to debug builds (verified on both APKs);
+46 mobile + 368 backend tests. APK distributed via the v0.1.0 GitHub
+prerelease (never committed). Known limitation recorded: the viewer loads
+the whole validated PDF into memory — large field manuals may need
+temp-file/streamed rendering later.
+Details: docs/MILESTONE_10/android-internal-test-build.md
+
+## Next milestones (direction agreed at v0.1.0)
+
+- **Milestone 11 — Technician field testing**: use v0.1.0 on real service
+  calls first; record friction (search speed/wording, taps, outdoor
+  readability, PDF usability, unsupported workflows) before adding any
+  features.
+- **Milestone 12 — Interactive drawings**: drawing → tap reference → part
+  (builds on the observed /en/Manual/Drawing pages and partSearch
+  filtering; requires its own discovery/observation pass first).
+- **Milestone 13 — Multi-provider support**: additional connectors on the
+  existing provider/transport/registry + document abstraction.
+- **Milestone 14 — AI technician assistant**: serial → machine → documents
+  → fault codes → suggested diagnosis/repair steps with citations.
 
 ## Post-MVP direction
 
