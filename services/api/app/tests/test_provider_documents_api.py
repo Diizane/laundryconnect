@@ -150,13 +150,49 @@ class TestDownload:
 
     def test_tampered_token_is_404(self, client: TestClient) -> None:
         token = next(d["token"] for d in _discover(client)["documents"] if d["token"])
-        version, body, signature = token.split(".")
-        flipped = ("A" if body[0] != "A" else "B") + body[1:]
-        response = client.get(f"/api/v1/providers/mock/documents/{version}.{flipped}.{signature}")
-        assert response.status_code == 404
+        middle = len(token) // 2
+        flipped = token[:middle] + ("A" if token[middle] != "A" else "B") + token[middle + 1 :]
+        assert client.get(f"/api/v1/providers/mock/documents/{flipped}").status_code == 404
 
     def test_malformed_token_is_404(self, client: TestClient) -> None:
         assert client.get("/api/v1/providers/mock/documents/garbage").status_code == 404
+
+    def test_token_is_opaque_even_when_decoded(self, client: TestClient) -> None:
+        # Encryption, not encoding: base64-decoding an issued token must not
+        # reveal any provider path, hostname, or identifier.
+        import base64
+
+        token = next(d["token"] for d in _discover(client)["documents"] if d["token"])
+        decoded = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
+        for marker in (b"/mock/documents/", b"source_path", b'{"p"', b".pdf"):
+            assert marker not in decoded, f"{marker!r} readable in decoded token"
+
+    def test_expired_token_is_404(self, client: TestClient) -> None:
+        import time
+
+        from app.core.config import get_settings
+        from app.providers.document_token import mint_document_token_at_time
+
+        settings = get_settings()
+        expired = mint_document_token_at_time(
+            settings,
+            "mock",
+            "/mock/documents/sc60-service.pdf",
+            int(time.time()) - settings.document_token_ttl_seconds - 61,
+        )
+        assert client.get(f"/api/v1/providers/mock/documents/{expired}").status_code == 404
+
+    def test_production_without_secret_refuses_token_operations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for client in _client(
+            monkeypatch,
+            ENABLED_PROVIDERS="mock",
+            ENVIRONMENT="production",
+            DOCUMENT_TOKEN_SECRET="",
+        ):
+            response = client.get("/api/v1/providers/mock/documents", params={"ref": "SC60"})
+            assert response.status_code == 503
 
     def test_token_bound_to_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for client in _client(

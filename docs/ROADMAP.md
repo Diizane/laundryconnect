@@ -145,11 +145,12 @@ pipeline.
   future roadmap inputs (docs/MILESTONE_9/supplementary-observations.md).
 - [x] Phase 3 — Document API (backend proxy) — implemented, pending review:
   `GET /api/v1/providers/{id}/documents?ref=` (client-safe metadata +
-  signed opaque tokens; no provider URLs/paths/hostnames in responses) and
+  encrypted opaque tokens; no provider URLs/paths/hostnames in responses) and
   `GET /api/v1/providers/{id}/documents/{token}` (server-side token
   resolution → provider fetch → validated `application/pdf`, sanitised
-  filename, `Cache-Control: no-store`). HMAC-SHA256 provider-bound tokens,
-  fail-closed (tampering ≡ 404); no client URL/path input surface;
+  filename, `Cache-Control: no-store`). Authenticated-encrypted (Fernet)
+  provider-bound expiring tokens (15 min TTL; production secret enforced),
+  fail-closed (tampering/expiry ≡ 404); no client URL/path input surface;
   provider-agnostic contract with mock fixture documents as default;
   deliberate leak-free error mapping (404/400/502/503). ADR 0014;
   docs/MILESTONE_9/phase-3-document-api.md. 365 backend tests (48 new),

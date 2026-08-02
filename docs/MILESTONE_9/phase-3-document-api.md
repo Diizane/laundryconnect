@@ -22,8 +22,11 @@ GET /api/v1/providers/{provider_id}/documents/{token}
   `<ManualId>:<ModelId>` — both values already present in search-result
   `metadata` (the M8 search response is unchanged). Providers strictly
   validate their own reference format before any request.
-- `token` is a signed, versioned, provider-bound opaque identifier minted
-  by discovery (HMAC-SHA256; ADR 0014). Clients treat it as a black box.
+- `token` is an authenticated-**encrypted**, provider-bound, expiring
+  opaque identifier minted by discovery (Fernet via the `cryptography`
+  library; 15-minute default TTL; ADR 0014). The payload is confidential —
+  decoding the token yields ciphertext only. Clients treat it as a black
+  box; expiry simply means rediscovering (which re-mints).
 - The client workflow: search → select result → discover documents →
   select document → receive validated PDF bytes. **No provider URL, path,
   hostname, or internal identifier appears anywhere in responses** (tested
@@ -94,9 +97,11 @@ contract unchanged.
 
 ## Risks
 
-- **Tokens have no expiry** (stateless by design): mitigated because tokens
-  confer no authority — every download re-passes provider gates — and the
-  secret can be rotated. Recorded in ADR 0014.
+- **Token lifetime is a trade-off**: 15 minutes (configurable) bounds a
+  leaked token's useful life while comfortably covering discover → tap →
+  download; tokens confer no authority regardless — every download
+  re-passes provider gates — and secret rotation invalidates everything
+  outstanding. Recorded in ADR 0014.
 - **Bytes are buffered, not chunk-streamed**, bounded by the 100 MB cap;
   observed documents are ~0.4 MB. A streaming pass-through is a recorded
   future improvement, deliberately not a Phase 3 redesign.

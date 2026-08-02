@@ -20,9 +20,9 @@ from app.api.deps import RegistryDep, SettingsDep
 from app.providers.base import ProviderConnector
 from app.providers.document_token import (
     InvalidDocumentToken,
+    MissingTokenSecret,
     mint_document_token,
     resolve_document_token,
-    token_secret,
 )
 from app.providers.errors import (
     DocumentNotFound,
@@ -43,7 +43,8 @@ router = APIRouter(prefix="/providers/{provider_id}/documents", tags=["provider-
 # Generic surface constraints; the provider applies its own strict semantic
 # validation on top (e.g. Alliance requires '<digits>:<digits>').
 _REF_PATTERN = r"^[A-Za-z0-9:._-]{1,64}$"
-_TOKEN_PATTERN = r"^[A-Za-z0-9._-]{1,512}$"  # noqa: S105 - URL-safe charset regex, not a secret
+# Fernet tokens: urlsafe base64 with '=' padding, no dots.
+_TOKEN_PATTERN = r"^[A-Za-z0-9_=-]{1,1024}$"  # noqa: S105 - URL-safe charset regex, not a secret
 _FILENAME_SAFE = re.compile(r"^[A-Za-z0-9._-]{1,120}\.pdf$")
 
 
@@ -135,16 +136,22 @@ async def discover_documents(
         documents = await connector.discover_documents(ref)
     except ProviderError as exc:
         _raise_for_provider_error(exc, provider_id)
-    secret = token_secret(settings)
+    try:
+        tokens = {
+            info.source_path: mint_document_token(settings, provider_id, info.source_path)
+            for info in documents
+            if info.available and info.source_path
+        }
+    except MissingTokenSecret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document tokens are not configured for this environment.",
+        ) from None
     return DocumentDiscoveryResponse(
         provider_id=provider_id,
         documents=[
             ProviderDocumentOut(
-                token=(
-                    mint_document_token(secret, provider_id, info.source_path)
-                    if info.available and info.source_path
-                    else None
-                ),
+                token=tokens.get(info.source_path),
                 title=info.title,
                 document_type=info.document_type,
                 part_number=info.part_number,
@@ -180,9 +187,16 @@ async def download_document(
     """
     connector = _connector_or_404(registry, provider_id)
     try:
-        source_path = resolve_document_token(token_secret(settings), token, provider_id)
+        source_path = resolve_document_token(settings, token, provider_id)
+    except MissingTokenSecret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document tokens are not configured for this environment.",
+        ) from None
     except InvalidDocumentToken:
         # Deliberately identical to a missing document — leaks nothing.
+        # Covers malformed, tampered, EXPIRED, future-issued, and
+        # wrong-provider tokens alike.
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found.") from None
     try:
         body = await connector.fetch_document(source_path)
