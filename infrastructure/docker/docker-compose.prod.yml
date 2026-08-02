@@ -1,0 +1,59 @@
+# Production/staging stack: API behind Caddy (automatic HTTPS).
+#
+#   docker compose -f infrastructure/docker/docker-compose.prod.yml up -d --build
+#
+# Every secret comes from the environment (a .env file on the server with
+# 0600 permissions, or the platform's secret manager) — never from this
+# file and never from the repository. See docs/DEPLOYMENT.md.
+
+name: laundryconnect-prod
+
+services:
+  api:
+    build:
+      context: ../../services/api
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+      # Required in production — the app refuses to start without these.
+      API_KEYS: ${API_KEYS:?API_KEYS is required}
+      DOCUMENT_TOKEN_SECRET: ${DOCUMENT_TOKEN_SECRET:?DOCUMENT_TOKEN_SECRET is required}
+      # Providers: mock stays available; Alliance is an explicit opt-in.
+      ENABLED_PROVIDERS: ${ENABLED_PROVIDERS:-mock}
+      ALLIANCE_MODE: ${ALLIANCE_MODE:-fixture}
+      ALLIANCE_ACCESS_APPROVED: ${ALLIANCE_ACCESS_APPROVED:-false}
+      ALLIANCE_SESSION_PATH: /run/secrets/alliance-session.json
+      DATABASE_URL: ${DATABASE_URL:-}
+    volumes:
+      # The operator-bootstrapped session file, mounted read-only from the
+      # host (0600, outside the repo). Never baked into the image.
+      - ${ALLIANCE_SESSION_HOST_PATH:-/dev/null}:/run/secrets/alliance-session.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/api/v1/health/live')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # e.g. api.example.com — Caddy obtains and renews the certificate.
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

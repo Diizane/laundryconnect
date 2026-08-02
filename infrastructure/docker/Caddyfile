@@ -1,0 +1,33 @@
+# Automatic HTTPS (Let's Encrypt) in front of the API.
+# API_DOMAIN is supplied by docker-compose.prod.yml.
+
+{$API_DOMAIN} {
+	encode gzip
+
+	# PDFs are proxied through the API; allow ample time and body size for
+	# them while keeping the backend's own 100 MB cap authoritative.
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy api:8000 {
+		flush_interval -1
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

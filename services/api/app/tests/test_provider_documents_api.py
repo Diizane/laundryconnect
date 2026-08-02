@@ -185,13 +185,22 @@ class TestDownload:
     def test_production_without_secret_refuses_token_operations(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # A production app needs API keys to start at all (Milestone 11), so
+        # supply one and authenticate — the missing TOKEN secret is what this
+        # test exercises.
+        api_key = "production-test-key-long-enough-1234"
         for client in _client(
             monkeypatch,
             ENABLED_PROVIDERS="mock",
             ENVIRONMENT="production",
             DOCUMENT_TOKEN_SECRET="",
+            API_KEYS=api_key,
         ):
-            response = client.get("/api/v1/providers/mock/documents", params={"ref": "SC60"})
+            response = client.get(
+                "/api/v1/providers/mock/documents",
+                params={"ref": "SC60"},
+                headers={"X-API-Key": api_key},
+            )
             assert response.status_code == 503
 
     def test_token_bound_to_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:

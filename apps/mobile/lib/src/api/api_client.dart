@@ -22,6 +22,17 @@ const apiBaseUrl = String.fromEnvironment(
   defaultValue: 'http://10.0.2.2:8000',
 );
 
+/// API key for a secured (staging/production) backend, supplied at build
+/// time: `--dart-define=API_KEY=…`. Empty for local/dev backends that run
+/// without authentication.
+///
+/// This is an internal-distribution control, not a user credential: a key
+/// inside an APK is extractable by anyone holding the file. Keep builds
+/// internal and rotate the key if a device is lost. Per-technician accounts
+/// are the follow-up milestone. It authenticates ONLY to the LaundryConnect
+/// backend — never to a provider.
+const apiKey = String.fromEnvironment('API_KEY', defaultValue: '');
+
 /// What kind of failure occurred — lets screens choose recovery behaviour
 /// (retry, rediscover, or explain) without parsing message text.
 enum ApiErrorKind {
@@ -38,6 +49,10 @@ enum ApiErrorKind {
 
   /// The request itself was invalid (400/422).
   invalidRequest,
+
+  /// The backend rejected this build's API key (401) — the build needs
+  /// updating, not a retry.
+  unauthorised,
 
   /// Connectivity/timeout.
   network,
@@ -109,6 +124,7 @@ class _BackendClient {
     ).replace(queryParameters: queryParameters);
     try {
       final request = http.Request(method, uri);
+      if (apiKey.isNotEmpty) request.headers['X-API-Key'] = apiKey;
       if (body != null) {
         request.headers['Content-Type'] = 'application/json';
         request.body = jsonEncode(body);
@@ -154,6 +170,12 @@ class _BackendClient {
         );
       case 404:
         throw ApiException(detail ?? 'Not found.', kind: ApiErrorKind.notFound);
+      case 401:
+        throw const ApiException(
+          'This app is not authorised for that server. Reinstall the current '
+          'internal build.',
+          kind: ApiErrorKind.unauthorised,
+        );
       case 422:
         throw const ApiException(
           'That request is not valid. Try a model, part, or fault code.',
