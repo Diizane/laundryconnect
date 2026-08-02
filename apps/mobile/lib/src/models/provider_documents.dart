@@ -65,4 +65,52 @@ class DocumentDiscovery {
             .map((d) => ProviderDocument.fromJson(d as Map<String, dynamic>))
             .toList(),
       );
+
+  /// Documents grouped by type, ordered so the ones a technician standing at
+  /// a machine reaches for come first. Providers list compliance paperwork
+  /// (declarations of conformity) before the service manuals, which buries
+  /// what matters — this reverses that.
+  List<DocumentGroup> get groups {
+    final byType = <String, List<ProviderDocument>>{};
+    for (final document in documents) {
+      final key = (document.documentType ?? 'Other').trim();
+      byType.putIfAbsent(key.isEmpty ? 'Other' : key, () => []).add(document);
+    }
+    final entries = byType.entries
+        .map((e) => DocumentGroup(documentType: e.key, documents: e.value))
+        .toList();
+    entries.sort((a, b) {
+      final byRank = a.rank.compareTo(b.rank);
+      return byRank != 0 ? byRank : a.documentType.compareTo(b.documentType);
+    });
+    return entries;
+  }
+}
+
+/// One collapsible section of the document list.
+class DocumentGroup {
+  const DocumentGroup({required this.documentType, required this.documents});
+
+  final String documentType;
+  final List<ProviderDocument> documents;
+
+  int get downloadableCount => documents.where((d) => d.isDownloadable).length;
+
+  /// Field-usefulness ranking (lower sorts first). Matched loosely because
+  /// providers word these inconsistently ("Technical Mnl", "Service
+  /// Manual", …).
+  int get rank {
+    final type = documentType.toLowerCase();
+    bool has(List<String> needles) => needles.any(type.contains);
+
+    if (has(['technical', 'service', 'repair'])) return 0;
+    if (has(['part'])) return 1;
+    if (has(['wiring', 'schematic', 'diagram'])) return 2;
+    if (has(['install', 'operation', 'maintenance', 'user', 'owner'])) return 3;
+    if (has(['bulletin', 'instruction'])) return 4;
+    if (has(['conformity', 'declaration', 'compliance', 'certificate'])) {
+      return 6; // compliance paperwork: last, it is rarely wanted on a job
+    }
+    return 5;
+  }
 }

@@ -83,17 +83,107 @@ void main() {
     });
   });
 
+  group('grouping and ordering', () {
+    test('documents group by type, most field-useful first', () {
+      // Mirrors a real BA120N response: the provider lists compliance
+      // paperwork first, which buries the manuals a technician wants.
+      ProviderDocument doc(String type, String part) => ProviderDocument(
+        token: 'token-$part',
+        title: '$part — $type',
+        documentType: type,
+        partNumber: part,
+        available: true,
+        dataOrigin: 'live',
+      );
+      final discovery = DocumentDiscovery(
+        providerId: 'alliance',
+        documents: [
+          doc('Declaration of Conformity', '70558201-2021'),
+          doc('Declaration of Conformity', '70558201-2022'),
+          doc('Installation Operation Maintenance Mnl', 'D0167'),
+          doc('Parts Mnl', 'D0287'),
+          doc('Technical Mnl', 'D0568'),
+        ],
+      );
+
+      final groups = discovery.groups;
+      expect(groups.map((g) => g.documentType), [
+        'Technical Mnl',
+        'Parts Mnl',
+        'Installation Operation Maintenance Mnl',
+        'Declaration of Conformity', // compliance paperwork sinks to last
+      ]);
+      expect(groups.first.documents.single.partNumber, 'D0568');
+      expect(groups.last.documents.length, 2);
+    });
+
+    test('missing document type falls into an Other group', () {
+      const discovery = DocumentDiscovery(
+        providerId: 'alliance',
+        documents: [
+          ProviderDocument(
+            token: 't',
+            title: 'D0999.pdf',
+            available: true,
+            dataOrigin: 'live',
+          ),
+        ],
+      );
+      expect(discovery.groups.single.documentType, 'Other');
+    });
+
+    test('downloadable count excludes unavailable documents', () {
+      final group = sampleDiscovery().groups.firstWhere(
+        (g) => g.documentType == 'Bulletin',
+      );
+      expect(group.documents.length, 1);
+      expect(group.downloadableCount, 0);
+    });
+  });
+
   group('document list', () {
-    testWidgets('lists documents with metadata badges', (tester) async {
+    testWidgets('shows one collapsible section per document type', (
+      tester,
+    ) async {
       await tester.pumpWidget(_screen(FakeProviderDocumentsApi()));
       await tester.pumpAndSettle();
 
-      expect(find.text('D0568 — Technical Mnl'), findsOneWidget);
+      // Both categories visible without scrolling; rows hidden until asked.
       expect(find.text('Technical Mnl'), findsOneWidget);
+      expect(find.text('Bulletin'), findsOneWidget);
+      expect(find.text('1 document'), findsNWidgets(2));
+      expect(find.text('D0568 — Technical Mnl'), findsNothing);
+    });
+
+    testWidgets('expanding a section reveals its documents and metadata', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_screen(FakeProviderDocumentsApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Technical Mnl'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('D0568 — Technical Mnl'), findsOneWidget);
       expect(find.text('D0568'), findsOneWidget);
       expect(find.text('Production'), findsOneWidget);
-      expect(find.text('English'), findsNWidgets(2));
       expect(find.text('Date 9/99'), findsOneWidget);
+    });
+
+    testWidgets('a single-category machine opens expanded', (tester) async {
+      final api = FakeProviderDocumentsApi(
+        discoverHandler: (_, _) async => DocumentDiscovery(
+          providerId: 'alliance',
+          documents: sampleDiscovery().documents
+              .where((d) => d.documentType == 'Technical Mnl')
+              .toList(),
+        ),
+      );
+      await tester.pumpWidget(_screen(api));
+      await tester.pumpAndSettle();
+
+      // Nothing to choose between — no extra tap required.
+      expect(find.text('D0568 — Technical Mnl'), findsOneWidget);
     });
 
     testWidgets('unavailable document is disabled and labelled', (
@@ -101,6 +191,8 @@ void main() {
     ) async {
       final api = FakeProviderDocumentsApi();
       await tester.pumpWidget(_screen(api));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bulletin'));
       await tester.pumpAndSettle();
 
       expect(find.text('not downloadable'), findsOneWidget);
@@ -157,7 +249,9 @@ void main() {
 
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
-      expect(find.text('D0568 — Technical Mnl'), findsOneWidget);
+      // Recovered: the grouped list is shown again.
+      expect(find.text('Technical Mnl'), findsOneWidget);
+      expect(find.text('Bulletin'), findsOneWidget);
     });
 
     testWidgets('reauthentication failure shows operator message', (
@@ -195,6 +289,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Technical Mnl'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('D0568 — Technical Mnl'));
       await tester.pumpAndSettle();
@@ -221,6 +317,8 @@ void main() {
         _screen(api, openPdf: (_, title, bytes) async => opened.add(title)),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Technical Mnl'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('D0568 — Technical Mnl'));
       await tester.pumpAndSettle();
@@ -245,6 +343,8 @@ void main() {
         },
       );
       await tester.pumpWidget(_screen(api));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Technical Mnl'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('D0568 — Technical Mnl'));
