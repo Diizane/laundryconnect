@@ -143,9 +143,18 @@ pipeline.
   ADR 0013; docs/MILESTONE_9/phase-2-document-retrieval.md (incl. manual
   live-validation plan); supplementary portal observations recorded as
   future roadmap inputs (docs/MILESTONE_9/supplementary-observations.md).
-- Phase 3 — API contract: decide proxy vs temporary internal download
-  endpoint vs metadata-only; avoid exposing provider URLs directly without a
-  strong reason.
+- [x] Phase 3 — Document API (backend proxy) — implemented, pending review:
+  `GET /api/v1/providers/{id}/documents?ref=` (client-safe metadata +
+  encrypted opaque tokens; no provider URLs/paths/hostnames in responses) and
+  `GET /api/v1/providers/{id}/documents/{token}` (server-side token
+  resolution → provider fetch → validated `application/pdf`, sanitised
+  filename, `Cache-Control: no-store`). Authenticated-encrypted (Fernet)
+  provider-bound expiring tokens (15 min TTL; production secret enforced),
+  fail-closed (tampering/expiry ≡ 404); no client URL/path input surface;
+  provider-agnostic contract with mock fixture documents as default;
+  deliberate leak-free error mapping (404/400/502/503). ADR 0014;
+  docs/MILESTONE_9/phase-3-document-api.md. 368 backend tests (51 new),
+  offline.
 - Phase 4 — Persistence: keep current behaviour — no document persistence,
   no caching, no background downloads (each a separate future milestone if
   ever needed).

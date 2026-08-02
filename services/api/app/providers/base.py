@@ -17,7 +17,14 @@ Rules for implementers:
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from app.providers.models import DataOrigin, ProviderHealth, ProviderResult, QueryType
+from app.providers.errors import ProviderDocumentsUnsupported
+from app.providers.models import (
+    DataOrigin,
+    ProviderDocumentInfo,
+    ProviderHealth,
+    ProviderResult,
+    QueryType,
+)
 
 
 class ProviderConnector(ABC):
@@ -42,3 +49,25 @@ class ProviderConnector(ABC):
     async def validate_credentials(self) -> bool:
         """Whether configured credentials work. Default: none required."""
         return True
+
+    # -- Document capability (Milestone 9) — optional per provider ----------
+
+    async def discover_documents(self, reference: str) -> list[ProviderDocumentInfo]:
+        """List the documents available for one search result's document
+        reference. Implementers MUST validate `reference` against a strict
+        provider-local format before any request (it may originate from a
+        client) and MUST keep traversal bounded — no crawling. Default:
+        unsupported.
+        """
+        raise ProviderDocumentsUnsupported(
+            f"provider '{self.provider_id}' does not support document retrieval"
+        )
+
+    async def fetch_document(self, source_path: str) -> bytes:
+        """Return one validated document's bytes for a `source_path` from
+        this provider's own `ProviderDocumentInfo`. Implementers MUST
+        validate the path shape (fail closed) and MUST return only validated
+        document content. Default: unsupported."""
+        raise ProviderDocumentsUnsupported(
+            f"provider '{self.provider_id}' does not support document retrieval"
+        )

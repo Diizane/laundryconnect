@@ -120,7 +120,7 @@ class TestParseLiteraturePage:
 class TestFixtureDiscovery:
     async def test_discover_documents_from_manual_link(self) -> None:
         connector = AllianceConnector(settings=_fixture_settings())
-        documents = await connector.discover_documents("/en/Manual?ManualId=1001&ModelId=2002")
+        documents = await connector.discover_documents("1001:2002")
         assert len(documents) == 4
         for doc in documents:
             assert doc.provider_id == "alliance"
@@ -141,7 +141,7 @@ class TestFixtureDiscovery:
     async def test_discovered_document_is_fetchable(self) -> None:
         # The workflow composes: discover → pick → fetch.
         connector = AllianceConnector(settings=_fixture_settings())
-        documents = await connector.discover_documents("/en/Manual?ManualId=1001&ModelId=2002")
+        documents = await connector.discover_documents("1001:2002")
         chosen = next(d for d in documents if d.available)
         body = await connector.fetch_document(chosen.source_path)
         assert body.startswith(b"%PDF-")
@@ -180,7 +180,7 @@ class TestBoundedTraversal:
             (FIXTURES / "literature_page.html").read_bytes(),
         )
         connector = AllianceConnector(settings=_fixture_settings(), transport=transport)
-        await connector.discover_documents("/en/Manual?ManualId=1001&ModelId=2002")
+        await connector.discover_documents("1001:2002")
         # Exactly the observed workflow: manual page + literature page.
         assert len(transport.page_urls) == 2
         # Discovery returns metadata only — no document bytes fetched.
@@ -192,7 +192,7 @@ class TestBoundedTraversal:
             b"",
         )
         connector = AllianceConnector(settings=_fixture_settings(), transport=transport)
-        documents = await connector.discover_documents("/en/Manual?ManualId=1001")
+        documents = await connector.discover_documents("1001:2002")
         assert len(transport.page_urls) == 1
         assert documents == []
 
@@ -204,16 +204,62 @@ class TestBoundedTraversal:
             (FIXTURES / "literature_page.html").read_bytes(),
         )
         connector = AllianceConnector(settings=_fixture_settings(), transport=transport)
-        await connector.discover_documents("/en/Manual?ManualId=1001&ModelId=2002")
-        await connector.discover_documents("/en/Manual?ManualId=1001&ModelId=2002")
+        await connector.discover_documents("1001:2002")
+        await connector.discover_documents("1001:2002")
         # Two independent calls → exactly two pages each, never more.
         assert len(transport.page_urls) == 4
 
     async def test_relative_paths_resolve_against_parts_base(self) -> None:
         transport = RecordingTransport(b"<html></html>", b"")
         connector = AllianceConnector(settings=_fixture_settings(), transport=transport)
-        await connector.discover_documents("/en/Manual?ManualId=1001")
-        assert transport.page_urls[0].startswith("https://pc.alliancels.net/en/Manual")
+        await connector.discover_documents("1001:2002")
+        assert transport.page_urls[0] == (
+            "https://pc.alliancels.net/en/Manual?ManualId=1001&ModelId=2002"
+        )
+
+
+class TestReferenceValidation:
+    """Client-originating references are validated BEFORE any request."""
+
+    @pytest.mark.parametrize(
+        "reference",
+        [
+            "",
+            "1001",
+            "1001:2002:3",
+            "/en/Manual?ManualId=1001&ModelId=2002",  # paths are refused
+            "https://evil.example/x",  # URLs are refused
+            "1001:2002x",
+            "abc:def",
+            "1" * 13 + ":2002",  # over-length ids refused
+        ],
+    )
+    async def test_invalid_reference_rejected_without_any_fetch(self, reference: str) -> None:
+        from app.providers.errors import InvalidDocumentReference
+
+        transport = RecordingTransport(b"", b"")
+        connector = AllianceConnector(settings=_fixture_settings(), transport=transport)
+        with pytest.raises(InvalidDocumentReference):
+            await connector.discover_documents(reference)
+        assert transport.page_urls == []  # nothing was fetched
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "",
+            "/en/Manual?ManualId=1001",
+            "/manuals/Production/../../etc/passwd",
+            "/manuals/Production/D0100.exe",
+            "https://pc.alliancels.net/manuals/Production/D0100.pdf",  # absolute refused
+            "/other/Production/D0100.pdf",
+        ],
+    )
+    async def test_invalid_document_path_fails_closed_without_any_fetch(self, path: str) -> None:
+        transport = RecordingTransport(b"", b"")
+        connector = AllianceConnector(settings=_fixture_settings(), transport=transport)
+        with pytest.raises(DocumentNotFound):
+            await connector.fetch_document(path)
+        assert transport.document_urls == []  # nothing was fetched
 
 
 # -- Connector: session-mode gates (pure local, no network) -------------------
@@ -228,7 +274,7 @@ class TestSessionModeGates:
             settings=Settings(_env_file=None, alliance_mode="session", alliance_session_path=None)
         )
         with pytest.raises(ReauthenticationRequired):
-            await connector.discover_documents("/en/Manual?ManualId=1001")
+            await connector.discover_documents("1001:2002")
         with pytest.raises(ReauthenticationRequired):
             await connector.fetch_document("/manuals/Production/D0100.pdf")
 
@@ -237,4 +283,4 @@ class TestSessionModeGates:
 
         connector = AllianceConnector(settings=Settings(_env_file=None, alliance_mode="credential"))
         with pytest.raises(LiveModeRefused):
-            await connector.discover_documents("/en/Manual?ManualId=1001")
+            await connector.discover_documents("1001:2002")

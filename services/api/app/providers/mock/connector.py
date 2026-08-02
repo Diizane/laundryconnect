@@ -11,12 +11,15 @@ deterministically.
 """
 
 import asyncio
+import re
 from datetime import date
 from typing import ClassVar
 
 from app.providers.base import ProviderConnector
+from app.providers.errors import DocumentNotFound, InvalidDocumentReference
 from app.providers.models import (
     DataOrigin,
+    ProviderDocumentInfo,
     ProviderHealth,
     ProviderResult,
     QueryType,
@@ -111,6 +114,61 @@ def _sample_results() -> list[ProviderResult]:
     ]
 
 
+# Sample document workflow data (Milestone 9). Labelled sample throughout;
+# one entry is deliberately unavailable so clients handle that case.
+_DOCUMENT_REF = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_MOCK_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+    b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+    b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> endobj\n"
+    b"trailer << /Size 4 /Root 1 0 R >>\n"
+    b"%%EOF\n"
+)
+
+
+def _sample_documents() -> list[ProviderDocumentInfo]:
+    common = {"provider_id": MockProviderConnector.provider_id, "data_origin": DataOrigin.MOCK}
+    return [
+        ProviderDocumentInfo(
+            **common,
+            title="MOCK-SC60-SVC — Service Manual (sample)",
+            document_type="Service Manual",
+            part_number="MOCK-SC60-SVC",
+            comment="Rev 4",
+            languages=["English"],
+            category="Sample",
+            filename="sc60-service.pdf",
+            source_path="/mock/documents/sc60-service.pdf",
+            available=True,
+        ),
+        ProviderDocumentInfo(
+            **common,
+            title="MOCK-SC60-PRT — Parts Manual (sample)",
+            document_type="Parts Manual",
+            part_number="MOCK-SC60-PRT",
+            comment="Rev 2",
+            languages=["English", "Español"],
+            category="Sample",
+            filename="sc60-parts.pdf",
+            source_path="/mock/documents/sc60-parts.pdf",
+            available=True,
+        ),
+        ProviderDocumentInfo(
+            **common,
+            title="MOCK-SC60-LEG — Legacy Bulletin (sample, no download)",
+            document_type="Bulletin",
+            part_number="MOCK-SC60-LEG",
+            comment="Printed only",
+            languages=["English"],
+            category=None,
+            filename=None,
+            source_path="",
+            available=False,
+        ),
+    ]
+
+
 class MockProviderConnector(ProviderConnector):
     provider_id: ClassVar[str] = "mock"
     display_name: ClassVar[str] = "Mock Provider (sample data)"
@@ -154,3 +212,20 @@ class MockProviderConnector(ProviderConnector):
         if self._fail_with is not None:
             return ProviderHealth(status="failed", detail="fault injection enabled")
         return ProviderHealth(status="ok", detail="mock provider always available")
+
+    # -- Document capability (fixture-backed; supports API tests) ----------
+
+    async def discover_documents(self, reference: str) -> list[ProviderDocumentInfo]:
+        if self._fail_with is not None:
+            raise self._fail_with
+        if _DOCUMENT_REF.match(reference or "") is None:
+            raise InvalidDocumentReference("mock document reference is invalid")
+        return _sample_documents()
+
+    async def fetch_document(self, source_path: str) -> bytes:
+        if self._fail_with is not None:
+            raise self._fail_with
+        known = {doc.source_path for doc in _sample_documents() if doc.available}
+        if source_path not in known:
+            raise DocumentNotFound("no sample document at this location")
+        return _MOCK_PDF
