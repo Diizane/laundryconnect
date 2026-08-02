@@ -16,17 +16,40 @@ Security posture this document assumes:
 
 ## 1. Server
 
-Any small VM works (1 vCPU / 1–2 GB is ample): Hetzner, DigitalOcean,
-Vultr, Lightsail, or a Fly.io machine. Requirements: Docker + Docker
-Compose, a DNS A/AAAA record pointing at it (e.g. `api.example.com`), and
-ports 80/443 open.
+Any small VM works (1 vCPU / 1–2 GB is ample): Hetzner (~€4/mo),
+DigitalOcean, Vultr, Lightsail. Requirements: Docker + Docker Compose, a
+hostname resolving to it, and ports 80/443 open.
+
+Recommended image: Ubuntu 24.04 LTS. After first login:
+
+```
+apt update && apt install -y docker.io docker-compose-v2 git
+```
+
+### Hostname without buying a domain
+
+A VPS has no hostname of its own, and Let's Encrypt will not issue a
+certificate for a bare IP address — but two free services give a real DNS
+name that works with automatic HTTPS:
+
+- **DuckDNS** (recommended — a memorable name): register free at
+  duckdns.org, create e.g. `laundryconnect`, point it at the server's IP.
+  Your domain becomes `laundryconnect.duckdns.org`.
+- **sslip.io** (zero signup): the hostname `<server-ip>.sslip.io` resolves
+  to that IP automatically — e.g. `203.0.113.10.sslip.io`. Nothing to
+  register; slightly uglier.
+
+Either works as `API_DOMAIN` below and Caddy will obtain a valid
+certificate for it. Swap in a real domain later by changing `API_DOMAIN`
+and rebuilding the app with the new URL.
 
 ## 2. Secrets (never in the repository)
 
-Create `/opt/laundryconnect/.env` on the server, `chmod 600`:
+Clone the repository to the server (`git clone <repo> /opt/laundryconnect/app`),
+then create `/opt/laundryconnect/.env`, `chmod 600`:
 
 ```
-API_DOMAIN=api.example.com
+API_DOMAIN=laundryconnect.duckdns.org        # or <ip>.sslip.io
 API_KEYS=<paste a generated key>            # add more, comma-separated
 DOCUMENT_TOKEN_SECRET=<paste a generated secret>
 ENABLED_PROVIDERS=mock,alliance
@@ -72,6 +95,7 @@ mean automated login.)
 ## 4. Run
 
 ```
+cd /opt/laundryconnect/app
 docker compose --env-file /opt/laundryconnect/.env \
   -f infrastructure/docker/docker-compose.prod.yml up -d --build
 ```
@@ -79,11 +103,11 @@ docker compose --env-file /opt/laundryconnect/.env \
 Caddy obtains and renews the TLS certificate automatically. Verify:
 
 ```
-curl https://api.example.com/api/v1/health/live          # 200, no key needed
-curl -X POST https://api.example.com/api/v1/search \
+curl https://laundryconnect.duckdns.org/api/v1/health/live          # 200, no key needed
+curl -X POST https://laundryconnect.duckdns.org/api/v1/search \
      -H "Content-Type: application/json" \
      -H "X-API-Key: $API_KEY" -d '{"query":"SC60"}'      # 200
-curl -X POST https://api.example.com/api/v1/search \
+curl -X POST https://laundryconnect.duckdns.org/api/v1/search \
      -H "Content-Type: application/json" -d '{"query":"SC60"}'   # 401
 ```
 
@@ -95,7 +119,7 @@ rejected.**
 ```
 cd apps/mobile
 flutter build apk --release \
-  --dart-define=API_BASE_URL=https://api.example.com \
+  --dart-define=API_BASE_URL=https://laundryconnect.duckdns.org \
   --dart-define=API_KEY=<the api key>
 ```
 
