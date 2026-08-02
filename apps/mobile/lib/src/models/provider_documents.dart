@@ -36,6 +36,21 @@ class ProviderDocument {
 
   bool get isDownloadable => available && token != null;
 
+  /// Whether this document is usable by an English-speaking technician.
+  ///
+  /// True when the provider lists English among its languages (many
+  /// documents are multi-language files that include English), and also
+  /// when no language is listed at all — an unclassified document is shown
+  /// rather than silently hidden, since hiding a manual a technician needs
+  /// is worse than showing one they cannot read.
+  bool get isEnglish {
+    if (languages.isEmpty) return true;
+    return languages.any((language) {
+      final normalised = language.trim().toLowerCase();
+      return normalised == 'en' || normalised.startsWith('english');
+    });
+  }
+
   factory ProviderDocument.fromJson(Map<String, dynamic> json) =>
       ProviderDocument(
         token: json['token'] as String?,
@@ -66,13 +81,23 @@ class DocumentDiscovery {
             .toList(),
       );
 
-  /// Documents grouped by type, ordered so the ones a technician standing at
-  /// a machine reaches for come first. Providers list compliance paperwork
-  /// (declarations of conformity) before the service manuals, which buries
-  /// what matters — this reverses that.
+  /// Documents an English-speaking technician can use. Provider catalogues
+  /// carry translations of the same manual for every market; those are
+  /// noise here. Documents with no language listed are kept (see
+  /// [ProviderDocument.isEnglish]).
+  List<ProviderDocument> get englishDocuments =>
+      documents.where((d) => d.isEnglish).toList();
+
+  /// How many documents were hidden as non-English.
+  int get hiddenNonEnglishCount => documents.length - englishDocuments.length;
+
+  /// English documents grouped by type, ordered so the ones a technician
+  /// standing at a machine reaches for come first. Providers list compliance
+  /// paperwork (declarations of conformity) before the service manuals,
+  /// which buries what matters — this reverses that.
   List<DocumentGroup> get groups {
     final byType = <String, List<ProviderDocument>>{};
-    for (final document in documents) {
+    for (final document in englishDocuments) {
       final key = (document.documentType ?? 'Other').trim();
       byType.putIfAbsent(key.isEmpty ? 'Other' : key, () => []).add(document);
     }

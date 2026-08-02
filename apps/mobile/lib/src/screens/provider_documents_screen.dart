@@ -198,16 +198,19 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
             ),
           ),
         ),
-        _Loaded(:final discovery) when discovery.documents.isEmpty => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'No documents listed for this machine.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
+        _Loaded(:final discovery) when discovery.englishDocuments.isEmpty =>
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                discovery.documents.isEmpty
+                    ? 'No documents listed for this machine.'
+                    : 'No English documents listed for this machine.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
           ),
-        ),
         _Loaded(:final discovery) => _GroupedDocumentList(
           groups: discovery.groups,
           downloadingTitle: _downloading,
@@ -313,10 +316,10 @@ class _DocumentTile extends StatelessWidget {
             children: [
               DataOriginBadge(document.dataOrigin),
               // The type is the group heading now — not repeated per row.
+              // Languages are not shown either: the list is English-only, so
+              // a language badge would say the same thing on every row.
               if (document.partNumber != null) InfoBadge(document.partNumber!),
               if (document.category != null) InfoBadge(document.category!),
-              if (document.languages.isNotEmpty)
-                InfoBadge(document.languages.join(', ')),
               if (!document.isDownloadable) const InfoBadge('not downloadable'),
             ],
           ),
