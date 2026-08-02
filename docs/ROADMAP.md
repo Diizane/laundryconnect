@@ -119,11 +119,12 @@ One provider (Alliance Laundry Systems), as a proof of architecture. Live
 Deferred to Milestone 9 (kept out of M8 on purpose): document retrieval,
 any caching/persistence of provider data, background sync, OCR.
 
-## Milestone 9 — Document retrieval (separate from search)
+## Milestone 9 — Document retrieval (separate from search) ✅
 
-Uses the same authenticated transport but is a distinct engineering
-concern; to be reviewed and tested independently of the validated search
-pipeline.
+Complete and live-validated end to end (2026-08-02): search → discover
+documents → validated PDF through the backend proxy, with the mobile
+client never seeing a provider URL. Uses the same authenticated transport
+but was reviewed and tested independently of the validated search pipeline.
 
 - [x] Phase 1 — Discover the document workflow ✅ (2026-07-26): supervised
   observation complete and reviewed. `/en/Manual` is an intermediate HTML
@@ -158,6 +159,16 @@ pipeline.
 - Phase 4 — Persistence: keep current behaviour — no document persistence,
   no caching, no background downloads (each a separate future milestone if
   ever needed).
+
+## Milestone 10 — First Android internal test build
+
+Produce an installable Android APK exercising the validated technician
+flow against the stable Phase 3 backend API: search → select Alliance
+result → discover documents → select manual → open/read PDF. Flutter/
+mobile work and test-environment configuration only — no provider
+transport, parsing, token, or API endpoint changes. Mock mode stays usable
+for emulator/widget tests; no live calls in CI; debug/internal-testing APK
+only (no Play Store).
 
 ## Post-MVP direction
 
