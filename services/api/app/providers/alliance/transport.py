@@ -190,6 +190,7 @@ class SessionTransport:
         search_url_template: str = (
             "https://pc.alliancels.net/en/Search/StartsWith?searchString={query}&x.Show=Assembly"
         ),
+        serial_search_url_template: str | None = None,
         parser: Callable[[bytes], list[dict]] | None = None,
         sleep: Callable[[float], Awaitable[None]] | None = None,
         now: Callable[[], float] = time.time,
@@ -205,6 +206,9 @@ class SessionTransport:
         self._max_response_bytes = max_response_bytes
         self._max_document_bytes = max_document_bytes
         self._search_url_template = search_url_template
+        # SERIAL queries use the portal's dedicated BySerial endpoint (exact
+        # machine resolution); when unset, all queries use the model search.
+        self._serial_search_url_template = serial_search_url_template
         self._semaphore = asyncio.Semaphore(max(1, max_concurrency))
         self._sleep = sleep or asyncio.sleep
         self._now = now
@@ -412,16 +416,24 @@ class SessionTransport:
             f"request failed ({type(last_exc).__name__ if last_exc else 'unknown'})"
         )
 
-    def _search_url(self, query: str) -> str:
+    def _search_url(self, query: str, query_type: QueryType = QueryType.AUTO) -> str:
         from urllib.parse import quote
 
-        return self._search_url_template.format(query=quote(query.strip(), safe=""))
+        template = self._search_url_template
+        if query_type is QueryType.SERIAL and self._serial_search_url_template:
+            # The model StartsWith search prefix-matches model numbers and
+            # returns unrelated machines for a serial (field-test finding);
+            # BySerial resolves the exact factory configuration instead.
+            template = self._serial_search_url_template
+        return template.format(query=quote(query.strip(), safe=""))
 
     async def search_raw(self, query: str, query_type: QueryType) -> list[dict]:
         """Fetch results for one query (safeguard 8 — no crawling). Body is
         streamed under the 5 MB cap, then handed to the configured parser
-        (Alliance Parts Connection HTML in production)."""
-        body = await self._fetch(self._search_url(query), self._max_response_bytes)
+        (Alliance Parts Connection HTML in production). SERIAL queries use
+        the dedicated BySerial endpoint; the response shares the same
+        results-table shape, so the parser is unchanged."""
+        body = await self._fetch(self._search_url(query, query_type), self._max_response_bytes)
         return self._parser(body)
 
     async def fetch_search_raw(self, query: str) -> bytes:

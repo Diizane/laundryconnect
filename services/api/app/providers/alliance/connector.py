@@ -241,6 +241,7 @@ class AllianceConnector(ProviderConnector):
             max_response_bytes=self._settings.alliance_max_response_bytes,
             max_document_bytes=self._settings.alliance_max_document_bytes,
             search_url_template=self._settings.alliance_search_url,
+            serial_search_url_template=self._settings.alliance_serial_search_url,
             parser=parse_search_html,
         )
 

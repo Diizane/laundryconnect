@@ -79,9 +79,17 @@ class Settings(BaseSettings):
     # (/en/Manual, /en/Model/Literature, /manuals/...) resolve against this.
     alliance_parts_base_url: str = "https://pc.alliancels.net"
     alliance_allowed_hosts: str = "portal.alliancels.net,pc.alliancels.net"
-    # Full search URL template ({query} is URL-encoded and substituted).
+    # Full search URL templates ({query} is URL-encoded and substituted).
+    # Model/keyword queries use the StartsWith model search; SERIAL queries
+    # use the portal's dedicated BySerial endpoint, which resolves a machine
+    # serial to its exact factory configuration (validated live 2026-07-30;
+    # first field-test finding 2026-08-02: StartsWith on a serial returns
+    # unrelated prefix-matched models).
     alliance_search_url: str = (
         "https://pc.alliancels.net/en/Search/StartsWith?searchString={query}&x.Show=Assembly"
+    )
+    alliance_serial_search_url: str = (
+        "https://pc.alliancels.net/en/Search/BySerial?searchString={query}&x.Show=Assembly"
     )
     alliance_rate_limit_per_minute: float = 12.0
     alliance_request_timeout_seconds: float = 20.0

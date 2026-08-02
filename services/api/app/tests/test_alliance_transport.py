@@ -126,6 +126,60 @@ async def test_off_allowlist_host_is_refused() -> None:
     assert client.requests == []
 
 
+class TestSerialSearchRouting:
+    """SERIAL queries use the BySerial endpoint (field-test finding:
+    StartsWith prefix-matches model numbers and returns unrelated machines
+    for a serial); every other query type keeps the model search."""
+
+    def _transport(self, client: FakeStreamClient) -> SessionTransport:
+        return SessionTransport(
+            client=client,
+            allowed_hosts=["pc.alliancels.net"],
+            rate_limiter=RateLimiter(0, sleep=_no_sleep),
+            sleep=_no_sleep,
+            search_url_template=(
+                "https://pc.alliancels.net/en/Search/StartsWith"
+                "?searchString={query}&x.Show=Assembly"
+            ),
+            serial_search_url_template=(
+                "https://pc.alliancels.net/en/Search/BySerial?searchString={query}&x.Show=Assembly"
+            ),
+        )
+
+    async def test_serial_query_uses_by_serial_endpoint(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(200)])
+        await self._transport(client).search_raw("1910075972", QueryType.SERIAL)
+        assert client.requests[0].startswith(
+            "https://pc.alliancels.net/en/Search/BySerial?searchString=1910075972"
+        )
+
+    @pytest.mark.parametrize(
+        "query_type",
+        [QueryType.AUTO, QueryType.MODEL, QueryType.PART, QueryType.KEYWORD],
+    )
+    async def test_other_query_types_keep_model_search(self, query_type: QueryType) -> None:
+        client = FakeStreamClient([FakeStreamResponse(200)])
+        await self._transport(client).search_raw("DR75", query_type)
+        assert "/en/Search/StartsWith" in client.requests[0]
+
+    async def test_serial_without_template_falls_back_to_model_search(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(200)])
+        transport = SessionTransport(
+            client=client,
+            allowed_hosts=["pc.alliancels.net"],
+            rate_limiter=RateLimiter(0, sleep=_no_sleep),
+            sleep=_no_sleep,
+            search_url_template="https://pc.alliancels.net/en/Search/StartsWith?q={query}",
+        )
+        await transport.search_raw("1910075972", QueryType.SERIAL)
+        assert "/en/Search/StartsWith" in client.requests[0]
+
+    async def test_serial_query_is_url_encoded(self) -> None:
+        client = FakeStreamClient([FakeStreamResponse(200)])
+        await self._transport(client).search_raw("135RX 009281/WK", QueryType.SERIAL)
+        assert "searchString=135RX%20009281%2FWK" in client.requests[0]
+
+
 async def test_parts_connection_host_allowed_and_query_encoded() -> None:
     client = FakeStreamClient([FakeStreamResponse(200)])
     transport = SessionTransport(
