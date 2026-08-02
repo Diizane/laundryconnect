@@ -208,58 +208,128 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
             ),
           ),
         ),
-        _Loaded(:final discovery) => ListView.builder(
-          itemCount: discovery.documents.length,
-          itemBuilder: (context, index) {
-            final document = discovery.documents[index];
-            final downloading = _downloading == document.title;
-            return ListTile(
-              enabled: document.isDownloadable,
-              leading: Icon(
-                document.isDownloadable
-                    ? Icons.picture_as_pdf_outlined
-                    : Icons.block,
-                color: document.isDownloadable
-                    ? theme.colorScheme.primary
-                    : theme.disabledColor,
-              ),
-              title: Text(document.title),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (document.comment != null) Text(document.comment!),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      DataOriginBadge(document.dataOrigin),
-                      if (document.documentType != null)
-                        InfoBadge(document.documentType!),
-                      if (document.partNumber != null)
-                        InfoBadge(document.partNumber!),
-                      if (document.category != null)
-                        InfoBadge(document.category!),
-                      if (document.languages.isNotEmpty)
-                        InfoBadge(document.languages.join(', ')),
-                      if (!document.isDownloadable)
-                        const InfoBadge('not downloadable'),
-                    ],
-                  ),
-                ],
-              ),
-              trailing: downloading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : null,
-              onTap: document.isDownloadable ? () => _open(document) : null,
-            );
-          },
+        _Loaded(:final discovery) => _GroupedDocumentList(
+          groups: discovery.groups,
+          downloadingTitle: _downloading,
+          onOpen: _open,
         ),
       },
+    );
+  }
+}
+
+/// Documents grouped into collapsible sections by type, most field-useful
+/// first, so a technician sees every category on one screen instead of
+/// scrolling a flat list.
+class _GroupedDocumentList extends StatelessWidget {
+  const _GroupedDocumentList({
+    required this.groups,
+    required this.downloadingTitle,
+    required this.onOpen,
+  });
+
+  final List<DocumentGroup> groups;
+  final String? downloadingTitle;
+  final void Function(ProviderDocument) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // A single group has nothing to choose between — show it open.
+    final startExpanded = groups.length == 1;
+    return ListView.builder(
+      itemCount: groups.length,
+      itemBuilder: (context, index) {
+        final group = groups[index];
+        return ExpansionTile(
+          key: PageStorageKey(group.documentType),
+          initiallyExpanded: startExpanded,
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: Icon(_iconFor(group), color: theme.colorScheme.primary),
+          title: Text(group.documentType, style: theme.textTheme.titleSmall),
+          subtitle: Text(
+            group.documents.length == 1
+                ? '1 document'
+                : '${group.documents.length} documents',
+            style: theme.textTheme.bodySmall,
+          ),
+          children: [
+            for (final document in group.documents)
+              _DocumentTile(
+                document: document,
+                downloading: downloadingTitle == document.title,
+                onOpen: onOpen,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  IconData _iconFor(DocumentGroup group) => switch (group.rank) {
+    0 => Icons.build_outlined,
+    1 => Icons.settings_outlined,
+    2 => Icons.electrical_services_outlined,
+    3 => Icons.menu_book_outlined,
+    4 => Icons.campaign_outlined,
+    6 => Icons.verified_outlined,
+    _ => Icons.description_outlined,
+  };
+}
+
+class _DocumentTile extends StatelessWidget {
+  const _DocumentTile({
+    required this.document,
+    required this.downloading,
+    required this.onOpen,
+  });
+
+  final ProviderDocument document;
+  final bool downloading;
+  final void Function(ProviderDocument) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: const EdgeInsets.only(left: 32, right: 16),
+      enabled: document.isDownloadable,
+      leading: Icon(
+        document.isDownloadable ? Icons.picture_as_pdf_outlined : Icons.block,
+        color: document.isDownloadable
+            ? theme.colorScheme.primary
+            : theme.disabledColor,
+      ),
+      title: Text(document.title),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (document.comment != null) Text(document.comment!),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              DataOriginBadge(document.dataOrigin),
+              // The type is the group heading now — not repeated per row.
+              if (document.partNumber != null) InfoBadge(document.partNumber!),
+              if (document.category != null) InfoBadge(document.category!),
+              if (document.languages.isNotEmpty)
+                InfoBadge(document.languages.join(', ')),
+              if (!document.isDownloadable) const InfoBadge('not downloadable'),
+            ],
+          ),
+        ],
+      ),
+      trailing: downloading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      onTap: document.isDownloadable ? () => onOpen(document) : null,
     );
   }
 }
