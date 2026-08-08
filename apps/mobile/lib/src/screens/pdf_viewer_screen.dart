@@ -115,11 +115,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 controller: _searchController,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                cursorColor: Colors.white,
                 decoration: const InputDecoration(
                   hintText: 'Search in this document',
                   hintStyle: TextStyle(color: Colors.white70),
                   border: InputBorder.none,
+                  // The app-wide input theme fills fields white, which is
+                  // right on the light search screen but invisible against
+                  // white text on the navy app bar. Opt out explicitly.
+                  filled: false,
+                  contentPadding: EdgeInsets.zero,
                 ),
                 onSubmitted: _search,
               )
