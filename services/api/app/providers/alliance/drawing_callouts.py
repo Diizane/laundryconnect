@@ -25,6 +25,8 @@ import logging
 import re
 from dataclasses import dataclass
 
+from app.providers.alliance.glyph_reader import ReadCallout, flatten_path, read_callouts
+
 logger = logging.getLogger(__name__)
 
 # Group ids are mangled by the export tool when a name repeats
@@ -89,53 +91,7 @@ def path_anchor_points(d: str) -> list[tuple[float, float]]:
     bounding box is the circle's own. Including control points would
     inflate it and shift nothing useful.
     """
-    points: list[tuple[float, float]] = []
-    x = y = 0.0
-    start_x = start_y = 0.0
-    position = 0
-    command = ""
-    while position < len(d):
-        match = _COMMAND.search(d, position)
-        chunk_end = len(d) if match is None else match.start()
-        if match is not None and match.start() == position:
-            command = match.group(0)
-            position += 1
-            next_match = _COMMAND.search(d, position)
-            chunk_end = len(d) if next_match is None else next_match.start()
-        elif not command:
-            return points  # numbers before any command: not a path we understand
-        chunk = [float(value) for value in _NUMBER.findall(d[position:chunk_end])]
-        position = chunk_end
-
-        lower = command.lower()
-        relative = command.islower()
-        arity = _ARITY.get(lower)
-        if arity is None:
-            continue
-        if lower == "z":
-            x, y = start_x, start_y
-            points.append((x, y))
-            continue
-        if arity == 0 or len(chunk) < arity:
-            continue
-        for index in range(0, len(chunk) - arity + 1, arity):
-            args = chunk[index : index + arity]
-            if lower == "h":
-                x = x + args[0] if relative else args[0]
-            elif lower == "v":
-                y = y + args[0] if relative else args[0]
-            else:
-                end_x, end_y = args[-2], args[-1]
-                x = x + end_x if relative else end_x
-                y = y + end_y if relative else end_y
-            points.append((x, y))
-            if lower == "m":
-                if index == 0:
-                    start_x, start_y = x, y
-                # Subsequent pairs after an M are implicit line-tos.
-                lower = "l"
-                command = "l" if relative else "L"
-    return points
+    return flatten_path(d, curve_samples=1)
 
 
 def _group_body(svg: str, start: int) -> str:
@@ -203,6 +159,78 @@ def extract_callouts(svg: str) -> list[DrawingCallout]:
     return callouts
 
 
+# Two markers this close together are the same marker.
+_SAME_MARKER = 3.0
+
+
+def reconcile(named: list[DrawingCallout], read: list[ReadCallout]) -> list[DrawingCallout]:
+    """Combine what the markup says with what the marker actually shows.
+
+    Neither source is trusted over the other:
+
+    - only one of them knows the number → use it;
+    - both agree → keep it;
+    - the markup gives one marker two different numbers (observed: a real
+      drawing with `callout_20` and `callout_21` groups stacked on the same
+      circle, where the app would silently answer with whichever was drawn
+      last) → the digits on the marker decide between them;
+    - they contradict each other, or the tie cannot be broken → no tap
+      target, because a marker that names the wrong part is worse than a
+      marker that names none.
+    """
+    positions: list[tuple[float, float]] = []
+    from_markup: list[dict[str, DrawingCallout]] = []
+    from_marker: list[DrawingCallout | None] = []
+
+    def slot(x: float, y: float) -> int:
+        for index, (px, py) in enumerate(positions):
+            if abs(px - x) <= _SAME_MARKER and abs(py - y) <= _SAME_MARKER:
+                return index
+        positions.append((x, y))
+        from_markup.append({})
+        from_marker.append(None)
+        return len(positions) - 1
+
+    for callout in named:
+        from_markup[slot(callout.x, callout.y)][callout.reference] = callout
+    for marker in read:
+        from_marker[slot(marker.x, marker.y)] = DrawingCallout(
+            reference=marker.reference, x=marker.x, y=marker.y, radius=marker.radius
+        )
+
+    out: list[DrawingCallout] = []
+    for index, claimed in enumerate(from_markup):
+        observed = from_marker[index]
+        if not claimed:
+            if observed is not None:
+                out.append(observed)
+            continue
+        if len(claimed) == 1:
+            reference, callout = next(iter(claimed.items()))
+            if observed is not None and observed.reference != reference:
+                logger.warning(
+                    "alliance drawing: markup and marker disagree, dropping the callout",
+                    extra={"markup": reference, "marker": observed.reference},
+                )
+                continue
+            out.append(callout)
+            continue
+        # The markup gives one marker more than one number; only the digits
+        # drawn on it can say which, and only if they name one of them.
+        if observed is not None and observed.reference in claimed:
+            logger.info(
+                "alliance drawing: stacked callouts resolved by reading the marker",
+                extra={"claimed": sorted(claimed), "chosen": observed.reference},
+            )
+            out.append(claimed[observed.reference])
+        else:
+            logger.warning(
+                "alliance drawing: a marker claims several numbers, dropping it",
+                extra={"claimed": sorted(claimed)},
+            )
+    return out
+
+
 def extract_geometry(svg: str) -> DiagramGeometry:
     """Callouts plus the coordinate space they are expressed in.
 
@@ -214,4 +242,6 @@ def extract_geometry(svg: str) -> DiagramGeometry:
         if svg:
             logger.info("alliance drawing: no viewBox, callouts not offered")
         return DiagramGeometry(view_box=None, callouts=[])
-    return DiagramGeometry(view_box=view_box, callouts=extract_callouts(svg))
+    return DiagramGeometry(
+        view_box=view_box, callouts=reconcile(extract_callouts(svg), read_callouts(svg))
+    )
