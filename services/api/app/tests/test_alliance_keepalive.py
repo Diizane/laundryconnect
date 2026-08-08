@@ -101,10 +101,15 @@ class TestTick:
         async def fetch(url: str) -> bytes:
             raise ReauthenticationRequired("session gone")
 
-        clock = _Clock()
-        keepalive = SessionKeepalive(_settings(tmp_path), fetch_page=fetch, now=clock)
-        keepalive.started_at = clock.t
-        clock.t += 6 * 3600  # session lived six hours
+        import os
+        import time
+
+        settings = _settings(tmp_path)
+        # Session bootstrapped six hours ago; age is read from the file so
+        # the figure survives container restarts.
+        six_hours_ago = time.time() - 6 * 3600
+        os.utime(settings.alliance_session_path, (six_hours_ago, six_hours_ago))
+        keepalive = SessionKeepalive(settings, fetch_page=fetch)
 
         with caplog.at_level(logging.WARNING):
             assert await keepalive.tick() is False
@@ -112,7 +117,7 @@ class TestTick:
         assert keepalive.reauth_detected_at is not None
         # The measurement we are running this for.
         record = next(r for r in caplog.records if "expired despite keepalive" in r.message)
-        assert record.session_age_hours == 6.0
+        assert 5.9 < record.session_age_hours < 6.1
 
     async def test_transient_failure_keeps_the_loop_running(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -192,3 +197,41 @@ class TestLoop:
         with pytest.raises(StopAsyncIteration):
             await keepalive._run()
         assert slept == [60]  # never faster than once a minute
+
+
+class TestSessionAgeSurvivesRestarts:
+    """The measurement must track the SESSION, not the process — otherwise
+    every deploy resets the clock and the idle-vs-absolute question can
+    never be answered."""
+
+    def test_age_comes_from_the_session_file_not_process_start(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import os
+        import time
+
+        monkeypatch.delenv("CI", raising=False)
+        # Build settings FIRST: the helper writes the session file, which
+        # would otherwise reset the mtime we are backdating.
+        settings = _settings(tmp_path)
+        six_hours_ago = time.time() - 6 * 3600
+        os.utime(settings.alliance_session_path, (six_hours_ago, six_hours_ago))
+
+        keepalive = SessionKeepalive(settings, fetch_page=None)
+        keepalive.started_at = time.time()  # process restarted just now
+
+        age_hours = keepalive.session_age_seconds / 3600
+        assert 5.9 < age_hours < 6.1
+
+    def test_falls_back_to_process_start_when_the_file_is_unreadable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("CI", raising=False)
+        settings = _settings(tmp_path, alliance_session_path=str(tmp_path / "missing.json"))
+        keepalive = SessionKeepalive(settings, fetch_page=None, now=_Clock())
+        keepalive.started_at = 1_000_000.0 - 120
+        assert keepalive.session_age_seconds == 120
+
+    def test_no_age_when_nothing_is_known(self, tmp_path: Path) -> None:
+        settings = Settings(_env_file=None, alliance_session_path=None)
+        assert SessionKeepalive(settings, fetch_page=None).session_age_seconds is None

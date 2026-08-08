@@ -25,6 +25,7 @@ Design constraints, consistent with the rest of the connector:
 
 import asyncio
 import logging
+import os
 import time
 
 from app.core.config import Settings
@@ -64,6 +65,21 @@ class SessionKeepalive:
 
     @property
     def session_age_seconds(self) -> float | None:
+        """Age of the SESSION, not of this process.
+
+        Taken from the session file's modification time — when the operator
+        last bootstrapped and uploaded it — so the measurement survives
+        container restarts. Measuring from process start made every deploy
+        reset the clock, which would have produced meaningless data for the
+        very question this exists to answer.
+        """
+        path = self._settings.alliance_session_path
+        if path:
+            try:
+                return max(0.0, self._now() - os.stat(os.path.expanduser(path)).st_mtime)
+            except OSError:
+                pass
+        # Fallback: process start, clearly worse but better than nothing.
         if self.started_at is None:
             return None
         return self._now() - self.started_at
