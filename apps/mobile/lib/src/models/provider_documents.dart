@@ -272,3 +272,76 @@ class DownloadedDocument {
     return 'just now';
   }
 }
+
+/// One assembly drawing offered for a machine.
+class DrawingSummary {
+  const DrawingSummary({
+    required this.token,
+    required this.title,
+    this.drawingId,
+  });
+
+  final String token;
+  final String title;
+  final String? drawingId;
+
+  factory DrawingSummary.fromJson(Map<String, dynamic> json) => DrawingSummary(
+    token: json['token'] as String,
+    title: json['title'] as String,
+    drawingId: json['drawing_id'] as String?,
+  );
+}
+
+/// One row of a drawing's parts table, keyed by its callout reference.
+class DrawingPart {
+  const DrawingPart({
+    required this.reference,
+    required this.partNumber,
+    required this.description,
+    this.comments,
+  });
+
+  final String reference;
+  final String partNumber;
+  final String description;
+  final String? comments;
+
+  factory DrawingPart.fromJson(Map<String, dynamic> json) => DrawingPart(
+    reference: json['reference'] as String,
+    partNumber: json['part_number'] as String,
+    description: json['description'] as String,
+    comments: json['comments'] as String?,
+  );
+
+  bool matches(String query) {
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty) return true;
+    return description.toLowerCase().contains(needle) ||
+        partNumber.toLowerCase().contains(needle) ||
+        reference == needle;
+  }
+}
+
+/// A drawing's vector diagram and its parts list.
+///
+/// Callout numbers inside the diagram are vector outlines rather than text,
+/// so they are not tappable — the technician reads a number off the diagram
+/// and finds it in the list. Mapping them is a later milestone that needs
+/// validating first, because sending someone to the wrong part is costly.
+class DrawingDetail {
+  const DrawingDetail({required this.svg, this.parts = const []});
+
+  final String svg;
+  final List<DrawingPart> parts;
+
+  bool get hasDiagram => svg.isNotEmpty;
+
+  factory DrawingDetail.fromJson(Map<String, dynamic> json) => DrawingDetail(
+    svg: json['svg'] as String? ?? '',
+    parts:
+        (json['parts'] as List<dynamic>?)
+            ?.map((p) => DrawingPart.fromJson(p as Map<String, dynamic>))
+            .toList() ??
+        const [],
+  );
+}

@@ -111,6 +111,12 @@ abstract interface class ProviderDocumentsApi {
     String token,
     String query,
   );
+
+  /// Assembly drawings available for a machine (Milestone 15).
+  Future<List<DrawingSummary>> discoverDrawings(String providerId, String ref);
+
+  /// One drawing's vector diagram and parts list.
+  Future<DrawingDetail> fetchDrawing(String providerId, String token);
 }
 
 /// Shared request plumbing: timeouts, connectivity errors, status handling,
@@ -394,6 +400,39 @@ class HttpProviderDocumentsApi implements ProviderDocumentsApi {
     );
     try {
       return DocumentSearchResults.fromJson(json as Map<String, dynamic>);
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+
+  @override
+  Future<List<DrawingSummary>> discoverDrawings(
+    String providerId,
+    String ref,
+  ) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/providers/$providerId/drawings',
+      queryParameters: {'ref': ref},
+    );
+    try {
+      return ((json as Map<String, dynamic>)['drawings'] as List<dynamic>)
+          .map((d) => DrawingSummary.fromJson(d as Map<String, dynamic>))
+          .toList();
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+
+  @override
+  Future<DrawingDetail> fetchDrawing(String providerId, String token) async {
+    final json = await _backend.requestJson(
+      'GET',
+      // Diagrams are large; allow the same window as a document download.
+      '/api/v1/providers/$providerId/drawings/$token',
+    );
+    try {
+      return DrawingDetail.fromJson(json as Map<String, dynamic>);
     } on TypeError {
       throw const ApiException('Unexpected server response.');
     }

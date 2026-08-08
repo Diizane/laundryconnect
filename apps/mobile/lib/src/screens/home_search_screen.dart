@@ -7,6 +7,7 @@ import '../storage/workspace_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/result_card.dart';
 import 'machine_workspace_screen.dart';
+import 'drawings_list_screen.dart';
 import 'provider_documents_screen.dart';
 
 /// Home screen: universal search bar first, results below on the same
@@ -117,6 +118,18 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
     );
   }
 
+  /// Open the assembly drawings for a result (Milestone 15).
+  Future<void> _openDrawingsForResult(SearchResult result) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DrawingsListScreen(
+          result: result,
+          api: widget.providerDocumentsApi,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openWorkspace(MachineSummary machine) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -173,6 +186,7 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
         response: response,
         onResultTap: _openWorkspaceForResult,
         onDocumentsTap: _openDocumentsForResult,
+        onDrawingsTap: _openDrawingsForResult,
       ),
     };
   }
@@ -326,9 +340,11 @@ class _ResultsView extends StatelessWidget {
     required this.response,
     required this.onResultTap,
     required this.onDocumentsTap,
+    required this.onDrawingsTap,
   });
 
   final void Function(SearchResult) onDocumentsTap;
+  final void Function(SearchResult) onDrawingsTap;
 
   final SearchResponse response;
   final void Function(SearchResult) onResultTap;
@@ -359,6 +375,13 @@ class _ResultsView extends StatelessWidget {
                 onTap: () => onResultTap(result),
                 onDocuments: result.documentRef != null
                     ? () => onDocumentsTap(result)
+                    : null,
+                // Drawings come from the same catalog reference; only
+                // Alliance results carry one today.
+                onDrawings:
+                    result.documentRef != null &&
+                        result.providerId == 'alliance'
+                    ? () => onDrawingsTap(result)
                     : null,
               ),
             ),

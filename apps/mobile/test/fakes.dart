@@ -153,6 +153,22 @@ DocumentContents sampleContents({
       ],
 );
 
+DrawingDetail sampleDrawing({String? svg}) => DrawingDetail(
+  svg:
+      svg ??
+      '<svg xmlns="http://www.w3.org/2000/svg" width="7.74in" height="9.71in" '
+          'viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/></svg>',
+  parts: const [
+    DrawingPart(
+      reference: '7',
+      partNumber: 'M412025P',
+      description: 'Burner',
+      comments: '3 required',
+    ),
+    DrawingPart(reference: '8', partNumber: 'SP533157', description: 'Belt'),
+  ],
+);
+
 final samplePdfBytes = Uint8List.fromList('%PDF-1.4 fake'.codeUnits);
 
 DownloadedDocument sampleDownload({
@@ -201,6 +217,8 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
     this.downloadHandler,
     this.contentsHandler,
     this.searchHandler,
+    this.drawingsHandler,
+    this.drawingHandler,
   });
 
   Future<DocumentDiscovery> Function(String providerId, String ref)?
@@ -215,11 +233,17 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
     String query,
   )?
   searchHandler;
+  Future<List<DrawingSummary>> Function(String providerId, String ref)?
+  drawingsHandler;
+  Future<DrawingDetail> Function(String providerId, String token)?
+  drawingHandler;
 
   final discoverCalls = <String>[];
   final downloadCalls = <String>[];
   final contentsCalls = <String>[];
   final searchCalls = <String>[];
+  final drawingListCalls = <String>[];
+  final drawingCalls = <String>[];
 
   @override
   Future<DocumentDiscovery> discoverDocuments(String providerId, String ref) {
@@ -235,6 +259,25 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
     final handler = downloadHandler;
     if (handler != null) return handler(providerId, token);
     return Future.value(sampleDownload());
+  }
+
+  @override
+  Future<List<DrawingSummary>> discoverDrawings(String providerId, String ref) {
+    drawingListCalls.add(ref);
+    final handler = drawingsHandler;
+    if (handler != null) return handler(providerId, ref);
+    return Future.value(const [
+      DrawingSummary(token: 'token-drive', title: 'Drive', drawingId: '548226'),
+      DrawingSummary(token: 'token-frame', title: 'Frame', drawingId: '548172'),
+    ]);
+  }
+
+  @override
+  Future<DrawingDetail> fetchDrawing(String providerId, String token) {
+    drawingCalls.add(token);
+    final handler = drawingHandler;
+    if (handler != null) return handler(providerId, token);
+    return Future.value(sampleDrawing());
   }
 
   @override
