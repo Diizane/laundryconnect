@@ -212,6 +212,8 @@ void main() {
         'manual_id': '16774',
         'model_id': '430362',
         'generation_match': 'exact',
+        'resolved_model': 'IAY135JQEM11B0C0AA',
+        'resolved_serial': '135RX009281WK',
       },
     );
 
@@ -319,6 +321,36 @@ void main() {
       expect(find.text('LIVE'), findsNothing);
       expect(find.text('alliance'), findsNothing);
       expect(find.text('assembly drawings'), findsNothing);
+    });
+
+    testWidgets('shows the full model number the serial resolved to', (
+      tester,
+    ) async {
+      await _pumpAppAndSearch(
+        tester,
+        _app(FakeSearchApi((_) async => response())),
+      );
+      await tester.pumpAndSettle();
+
+      // The family is the heading; the machine itself is what gets quoted
+      // when ordering a part.
+      expect(find.text('IAY135JQEM11B0C0AA'), findsOneWidget);
+    });
+
+    testWidgets('carries the full model into the documents screen', (
+      tester,
+    ) async {
+      await _pumpAppAndSearch(
+        tester,
+        _app(FakeSearchApi((_) async => response())),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('IAY135JQEM11B0C0AA'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('IAY135JQEM11B0C0AA'), findsOneWidget); // app bar
+      expect(find.text('Technical Mnl'), findsOneWidget);
     });
   });
 

@@ -109,7 +109,7 @@ class _DrawingsListScreenState extends State<DrawingsListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          '${widget.result.model ?? widget.result.title} — drawings',
+          '${widget.result.bestModel ?? widget.result.title} — drawings',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),

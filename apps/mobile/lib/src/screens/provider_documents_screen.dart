@@ -189,8 +189,10 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        // The full model number when a serial resolved to one, so the
+        // machine stays identified while browsing its manuals.
         title: Text(
-          widget.result.model ?? widget.result.title,
+          widget.result.bestModel ?? widget.result.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),

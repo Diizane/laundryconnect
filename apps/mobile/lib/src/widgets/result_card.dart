@@ -73,6 +73,21 @@ class ResultCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(result.title, style: theme.textTheme.titleSmall),
+                    // The full model number a serial resolved to. The title
+                    // is the family (IAY135J); this is the machine itself
+                    // (IAY135JQEM11B0C0AA), which is what gets quoted when
+                    // ordering parts or raising a job.
+                    if (result.resolvedModel != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        result.resolvedModel!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
                     if (result.description != null) ...[
                       const SizedBox(height: 4),
                       Text(

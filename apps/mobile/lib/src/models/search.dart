@@ -54,6 +54,22 @@ class SearchResult {
   /// coverage comments fit. Advisory only — the others remain openable.
   bool get isGenerationMatch => metadata['generation_match'] == 'exact';
 
+  /// The full model number a serial resolved to, when the search started
+  /// from a serial — `IAY135JQEM11B0C0AA` where [model] is the family
+  /// `IAY135J`. Null for a search that did not begin with a serial.
+  String? get resolvedModel {
+    final resolved = metadata['resolved_model'];
+    if (resolved == null || resolved.isEmpty || resolved == model) return null;
+    return resolved;
+  }
+
+  /// The serial that produced this result, when there was one.
+  String? get resolvedSerial => metadata['resolved_serial'];
+
+  /// The most specific model designation available: the full model number
+  /// if a serial resolved to one, otherwise the family.
+  String? get bestModel => resolvedModel ?? model;
+
   /// The reference this result's documents can be discovered with, or null
   /// when the result has none. The value is only ever sent back to the
   /// LaundryConnect backend — never to a provider.
