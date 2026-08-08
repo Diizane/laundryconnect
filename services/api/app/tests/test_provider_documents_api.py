@@ -275,3 +275,54 @@ class TestSearchApiUnchanged:
         body = response.json()
         assert {p["provider_id"]: p["status"] for p in body["providers"]} == {"mock": "success"}
         assert body["total_results"] > 0
+
+
+class TestInDocumentSearchAndContents:
+    """Milestone 13: search inside an open document, and jump to a heading."""
+
+    def _token(self, client: TestClient) -> str:
+        return next(d["token"] for d in _discover(client)["documents"] if d["token"])
+
+    def test_contents_reports_pages_and_searchability(self, client: TestClient) -> None:
+        token = self._token(client)
+        body = client.get(f"/api/v1/providers/mock/documents/{token}/contents").json()
+        assert body["page_count"] >= 1
+        assert "searchable" in body and "contents" in body
+
+    def test_search_reports_searchability_rather_than_silence(self, client: TestClient) -> None:
+        # An empty result must be distinguishable from "this document has no
+        # text layer at all" — otherwise the app looks broken.
+        token = self._token(client)
+        body = client.get(
+            f"/api/v1/providers/mock/documents/{token}/search", params={"q": "belt"}
+        ).json()
+        assert body["query"] == "belt"
+        assert "searchable" in body
+        assert body["total_hits"] == len(body["hits"])
+
+    def test_blank_query_is_rejected(self, client: TestClient) -> None:
+        token = self._token(client)
+        response = client.get(f"/api/v1/providers/mock/documents/{token}/search", params={"q": ""})
+        assert response.status_code == 422
+
+    def test_tampered_token_is_404_on_both_endpoints(self, client: TestClient) -> None:
+        token = self._token(client)
+        middle = len(token) // 2
+        bad = token[:middle] + ("A" if token[middle] != "A" else "B") + token[middle + 1 :]
+        assert client.get(f"/api/v1/providers/mock/documents/{bad}/contents").status_code == 404
+        assert (
+            client.get(
+                f"/api/v1/providers/mock/documents/{bad}/search", params={"q": "x"}
+            ).status_code
+            == 404
+        )
+
+    def test_endpoints_leak_no_provider_internals(self, client: TestClient) -> None:
+        token = self._token(client)
+        for path, params in (
+            (f"/api/v1/providers/mock/documents/{token}/contents", None),
+            (f"/api/v1/providers/mock/documents/{token}/search", {"q": "belt"}),
+        ):
+            raw = client.get(path, params=params).text
+            for marker in PROVIDER_INTERNALS:
+                assert marker not in raw, f"provider internal '{marker}' leaked"

@@ -13,6 +13,7 @@ deterministically.
 import asyncio
 import re
 from datetime import date
+from pathlib import Path
 from typing import ClassVar
 
 from app.providers.base import ProviderConnector
@@ -117,14 +118,11 @@ def _sample_results() -> list[ProviderResult]:
 # Sample document workflow data (Milestone 9). Labelled sample throughout;
 # one entry is deliberately unavailable so clients handle that case.
 _DOCUMENT_REF = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+# A genuinely valid minimal PDF (with xref) so mock mode exercises the
+# real indexing path rather than failing to parse.
 _MOCK_PDF = (
-    b"%PDF-1.4\n"
-    b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
-    b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
-    b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> endobj\n"
-    b"trailer << /Size 4 /Root 1 0 R >>\n"
-    b"%%EOF\n"
-)
+    Path(__file__).resolve().parents[1] / "alliance" / "fixtures" / "document.pdf"
+).read_bytes()
 
 
 def _sample_documents() -> list[ProviderDocumentInfo]:

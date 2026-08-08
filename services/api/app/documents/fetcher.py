@@ -135,6 +135,45 @@ class CachingDocumentFetcher:
             )
         return FetchedDocument(body, origin="live")
 
+    async def index(self, connector, provider_id: str, source_path: str):
+        """Search/contents index for a document, built once and reused.
+
+        The document itself is fetched through the normal cache-aware path,
+        so this inherits revalidation, the expired-session fallback, and
+        every provider gate.
+        """
+        from app.documents.pdf_index import DocumentIndex, build_index
+
+        key = DocumentCache.key(provider_id, source_path) if self._cache else None
+        if self._cache is not None:
+            try:
+                stored = self._cache.get_index(key)
+            except OSError:
+                stored = None
+            if stored is not None:
+                return DocumentIndex.from_json(stored)
+
+        document = await self.fetch(connector, provider_id, source_path)
+        try:
+            index = build_index(document.body)
+        except Exception as exc:
+            # A provider serving an unparseable PDF must produce a clean
+            # provider-content error, never an unhandled 500.
+            logger.warning(
+                "document could not be indexed",
+                extra={"provider": provider_id, "error": type(exc).__name__},
+            )
+            raise InvalidDocumentContent("document could not be read") from None
+        if self._cache is not None:
+            try:
+                self._cache.put_index(key, index.to_json())
+            except OSError as exc:
+                logger.warning(
+                    "could not store document index; rebuilding next time",
+                    extra={"provider": provider_id, "error": type(exc).__name__},
+                )
+        return index
+
 
 def _conditional_headers(cached) -> dict[str, str] | None:
     if cached is None:
