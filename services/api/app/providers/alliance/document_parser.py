@@ -98,6 +98,11 @@ def parse_manual_page(body: bytes) -> ManualPage:
     # Assembly drawings: one row per drawing, its name in the row text.
     seen_drawings: set[str] = set()
     for row in soup.find_all("tr"):
+        if row.find("table") is not None:
+            # A layout wrapper row "contains" the whole inner table, so its
+            # text is every drawing name concatenated. Same trap the
+            # literature parser hit in production.
+            continue
         anchor = row.find("a", href=lambda h: h and h.startswith(_DRAWING_PREFIX))
         if anchor is None:
             continue
