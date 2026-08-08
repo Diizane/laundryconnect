@@ -9,6 +9,7 @@ Pinned against a captured, sanitised SC60 response (2026-07-25).
 """
 
 import logging
+import re
 from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
@@ -16,11 +17,23 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 _PARTS_BASE = "https://pc.alliancels.net"
+# A serial search states the exact factory configuration it resolved to,
+# e.g. "Found model BA120NNN0RPC3W0000 for serial number 1910075972." That
+# model string is what the manual-generation comments describe, so it is
+# captured and carried through (Milestone 14).
+_RESOLVED_MODEL = re.compile(r"Found\s+model\s+([A-Z0-9-]+)\s+for\s+serial\s+number\s+(\w+)", re.I)
 _MANUFACTURER = "Alliance Laundry Systems"
+
+
+def _resolved_model(soup) -> tuple[str | None, str | None]:
+    """The exact model a serial search resolved to, and that serial."""
+    match = _RESOLVED_MODEL.search(soup.get_text(" "))
+    return (match.group(1), match.group(2)) if match else (None, None)
 
 
 def parse_search_html(body: bytes) -> list[dict]:
     soup = BeautifulSoup(body, "html.parser")
+    resolved_model, resolved_serial = _resolved_model(soup)
     table = soup.find("table", class_="list")
     if table is None:
         logger.warning("alliance parts search: no results table found")
@@ -57,6 +70,10 @@ def parse_search_html(body: bytes) -> list[dict]:
                 "product_family": product_family,
                 "manual_id": manual_id,
                 "model_id": model_id,
+                # Present only for serial searches; lets the connector pick
+                # the manual generation that covers this exact machine.
+                "resolved_model": resolved_model,
+                "resolved_serial": resolved_serial,
             }.items()
             if value
         }

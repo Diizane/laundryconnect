@@ -24,6 +24,7 @@ from app.providers.alliance.config import (
     resolve_mode,
 )
 from app.providers.alliance.document_parser import parse_literature_page, parse_manual_page
+from app.providers.alliance.generation import best_generation_index
 from app.providers.alliance.session import load_session
 from app.providers.alliance.transport import AllianceTransport, FixtureTransport
 from app.providers.base import ProviderConnector
@@ -57,6 +58,28 @@ def _parse_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+def _annotate_generation_match(records: list[dict]) -> None:
+    """Flag the manual generation covering this exact machine (M14).
+
+    A serial search returns every generation for the family; their comments
+    describe which model numbers each covers. Marking the right one saves
+    the technician decoding that by hand. Marked, never filtered — an
+    unmatched or ambiguous case simply leaves the list as it was.
+    """
+    if len(records) < 2:
+        return
+    metadata = records[0].get("metadata") or {}
+    model = metadata.get("resolved_model")
+    serial = metadata.get("resolved_serial")
+    if not model and not serial:
+        return  # not a serial search; nothing to match against
+
+    index = best_generation_index([r.get("description") for r in records], model, serial)
+    if index is None:
+        return
+    records[index].setdefault("metadata", {})["generation_match"] = "exact"
+
+
 class AllianceConnector(ProviderConnector):
     provider_id: ClassVar[str] = "alliance"
     display_name: ClassVar[str] = "Alliance Laundry Systems"
@@ -81,6 +104,7 @@ class AllianceConnector(ProviderConnector):
 
     async def search(self, query: str, query_type: QueryType) -> list[ProviderResult]:
         records = await self._records_for(query, query_type)
+        _annotate_generation_match(records)
         return [self._normalise(record) for record in records]
 
     async def _records_for(self, query: str, query_type: QueryType) -> list[dict]:

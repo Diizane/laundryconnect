@@ -48,3 +48,39 @@ class DataOriginBadge extends StatelessWidget {
     return InfoBadge(origin.replaceAll('_', ' ').toUpperCase(), color: color);
   }
 }
+
+/// Marks the manual generation that covers the exact machine a serial
+/// resolved to. Deliberately advisory: the other generations stay listed
+/// and openable, because the match is inferred from provider prose and a
+/// wrong manual is worse than an unsorted list.
+class MatchBadge extends StatelessWidget {
+  const MatchBadge(this.label, {super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check, size: 12, color: theme.colorScheme.onPrimary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

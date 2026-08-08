@@ -55,6 +55,7 @@ const sampleResponseJson = '''
 ''';
 
 void main() {
+  _generationMatchTests();
   group('SearchResponse.fromJson', () {
     test('parses a full response', () {
       final response = SearchResponse.fromJson(
@@ -115,6 +116,44 @@ void main() {
       expect(outcome('forbidden').statusLabel, 'access refused');
       expect(outcome('failed').statusLabel, 'unavailable');
       expect(outcome('timed_out').statusLabel, 'timed out');
+    });
+  });
+}
+
+void _generationMatchTests() {
+  group('generation match', () {
+    SearchResult result(Map<String, String> metadata) => SearchResult(
+      providerId: 'alliance',
+      sourceReference: 'als-model-395125',
+      resultType: 'model',
+      dataOrigin: 'live',
+      title: 'BA120N',
+      metadata: metadata,
+    );
+
+    test('flagged when the backend identified the covering generation', () {
+      expect(
+        result(const {'generation_match': 'exact'}).isGenerationMatch,
+        isTrue,
+      );
+    });
+
+    test('not flagged without the marker', () {
+      expect(result(const {'manual_id': '16677'}).isGenerationMatch, isFalse);
+      expect(result(const {}).isGenerationMatch, isFalse);
+    });
+
+    test('parses through from a backend payload', () {
+      final parsed = SearchResult.fromJson(const {
+        'provider_id': 'alliance',
+        'source_reference': 'als-model-395125',
+        'result_type': 'model',
+        'data_origin': 'live',
+        'title': 'BA120N',
+        'metadata': {'generation_match': 'exact', 'manual_id': '16892'},
+      });
+      expect(parsed.isGenerationMatch, isTrue);
+      expect(parsed.documentRef, isNull); // no model_id, so no ref
     });
   });
 }
