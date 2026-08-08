@@ -52,7 +52,9 @@ class AllianceTransport(Protocol):
     # one validated document fetch. Implementations never crawl.
     async def fetch_page(self, url: str) -> bytes: ...
 
-    async def fetch_document(self, url: str) -> bytes: ...
+    async def fetch_document(
+        self, url: str, *, conditional: dict[str, str] | None = None
+    ) -> bytes: ...
 
 
 class FixtureTransport:
@@ -75,7 +77,7 @@ class FixtureTransport:
             return (self._fixtures_dir / "manual_page.html").read_bytes()
         raise DocumentNotFound("no fixture page for this path")
 
-    async def fetch_document(self, url: str) -> bytes:
+    async def fetch_document(self, url: str, *, conditional: dict[str, str] | None = None) -> bytes:
         path = urlparse(url).path
         if not (path.startswith("/manuals/") and path.endswith(".pdf")):
             raise DocumentNotFound("no fixture document at this path")
@@ -116,11 +118,18 @@ class StreamResponse(Protocol):
 
 
 class StreamingClient(Protocol):
-    def stream(self, method: str, url: str) -> AbstractAsyncContextManager[StreamResponse]: ...
+    def stream(
+        self, method: str, url: str, headers: dict[str, str] | None = None
+    ) -> AbstractAsyncContextManager[StreamResponse]: ...
 
 
 class LiveFetchError(ProviderError):
     """A live fetch failed for a non-auth reason (timeout, server error)."""
+
+
+class NotModified(ProviderError):
+    """The provider confirmed a cached copy is still current (HTTP 304).
+    Not a failure: the caller serves what it already holds."""
 
 
 class HostNotAllowed(ProviderError):
@@ -155,6 +164,7 @@ _TERMINAL = (
     UnexpectedRedirect,
     DocumentNotFound,
     InvalidDocumentContent,
+    NotModified,
     LiveFetchError,
 )
 _RETRYABLE_STATUS = frozenset({500, 502, 503, 504})
@@ -212,6 +222,8 @@ class SessionTransport:
         self._semaphore = asyncio.Semaphore(max(1, max_concurrency))
         self._sleep = sleep or asyncio.sleep
         self._now = now
+        # Validators from the most recent document response (Milestone 12).
+        self.last_document_validators: dict[str, str | None] = {}
 
     def _check_url(self, url: str) -> None:
         """Enforce the live-URL policy before opening a stream: https only,
@@ -337,6 +349,7 @@ class SessionTransport:
         *,
         map_404: bool = False,
         require_pdf: bool = False,
+        conditional: dict[str, str] | None = None,
     ) -> bytes:
         """Fetch a URL as bounded bytes, streaming. Each attempt opens a
         fresh stream — a consumed/aborted response is never reused.
@@ -352,8 +365,11 @@ class SessionTransport:
             for attempt in range(self._max_retries + 1):
                 await self._rate_limiter.acquire()
                 try:
-                    async with self._client.stream("GET", url) as response:
+                    async with self._client.stream("GET", url, conditional) as response:
                         status = response.status_code
+                        if status == 304:
+                            # Provider confirms the caller's copy is current.
+                            raise NotModified("document unchanged")
                         if status == 401:
                             raise ReauthenticationRequired(
                                 "live session is no longer authenticated"
@@ -396,6 +412,13 @@ class SessionTransport:
                         # bytes when a PDF is required).
                         if require_pdf:
                             self._check_content_type(response, "application/pdf")
+                            # Remember the provider's cache validators so a
+                            # later request can revalidate instead of
+                            # re-downloading (Milestone 12).
+                            self.last_document_validators = {
+                                "etag": _header(response, "etag"),
+                                "last_modified": _header(response, "last-modified"),
+                            }
                         self._check_declared_size(response, max_bytes)
                         return await self._read_capped(
                             response, max_bytes, magic=b"%PDF-" if require_pdf else None
@@ -450,13 +473,32 @@ class SessionTransport:
         two-page traversal (Milestone 9 Phase 1 findings)."""
         return await self._fetch(url, self._max_response_bytes, map_404=True)
 
-    async def fetch_document(self, url: str) -> bytes:
+    async def fetch_document(self, url: str, *, conditional: dict[str, str] | None = None) -> bytes:
         """Download a single validated PDF, streamed under the 100 MB cap.
         Host-allowlisted; `Content-Type: application/pdf` enforced before the
         body is read; leading bytes must be `%PDF-` (early abort otherwise);
         404 maps to `DocumentNotFound`. No unbounded transfer into memory;
-        no crawling."""
-        return await self._fetch(url, self._max_document_bytes, map_404=True, require_pdf=True)
+        no crawling.
+
+        `conditional` carries If-None-Match/If-Modified-Since for cache
+        revalidation; a 304 raises `NotModified` so the caller serves its own
+        copy without transferring the body again."""
+        return await self._fetch(
+            url,
+            self._max_document_bytes,
+            map_404=True,
+            require_pdf=True,
+            conditional=conditional,
+        )
+
+
+def _header(response, name: str) -> str | None:
+    """Read one response header, tolerating clients that lack a mapping."""
+    try:
+        value = response.headers.get(name)
+    except Exception:
+        return None
+    return str(value) if value else None
 
 
 def parse_json_records(body: bytes) -> list[dict]:

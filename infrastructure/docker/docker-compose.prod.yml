@@ -31,11 +31,18 @@ services:
       ALLIANCE_KEEPALIVE_INTERVAL_SECONDS: ${ALLIANCE_KEEPALIVE_INTERVAL_SECONDS:-900}
       # Emergency stop for all live provider access.
       ALLIANCE_LIVE_KILL_SWITCH: ${ALLIANCE_LIVE_KILL_SWITCH:-false}
+      # Document cache (ADR 0015): revalidating, off by default.
+      DOCUMENT_CACHE_ENABLED: ${DOCUMENT_CACHE_ENABLED:-false}
+      DOCUMENT_CACHE_PATH: /var/cache/laundryconnect/documents
+      DOCUMENT_CACHE_MAX_BYTES: ${DOCUMENT_CACHE_MAX_BYTES:-2147483648}
+      DOCUMENT_CACHE_MAX_STALE_SECONDS: ${DOCUMENT_CACHE_MAX_STALE_SECONDS:-7776000}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
       # The operator-bootstrapped session file, mounted read-only from the
       # host (0600, outside the repo). Never baked into the image.
       - ${ALLIANCE_SESSION_HOST_PATH:-/dev/null}:/run/secrets/alliance-session.json:ro
+      # Cached documents survive container rebuilds.
+      - document_cache:/var/cache/laundryconnect/documents
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/api/v1/health/live')\""]
       interval: 30s
@@ -62,3 +69,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  document_cache:

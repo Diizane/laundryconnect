@@ -16,7 +16,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 
-from app.api.deps import RegistryDep, SettingsDep
+from app.api.deps import DocumentFetcherDep, RegistryDep, SettingsDep
 from app.providers.base import ProviderConnector
 from app.providers.document_token import (
     InvalidDocumentToken,
@@ -175,6 +175,7 @@ async def discover_documents(
 async def download_document(
     registry: RegistryDep,
     settings: SettingsDep,
+    fetcher: DocumentFetcherDep,
     provider_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"),
     token: str = Path(pattern=_TOKEN_PATTERN),
 ) -> Response:
@@ -199,16 +200,21 @@ async def download_document(
         # wrong-provider tokens alike.
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found.") from None
     try:
-        body = await connector.fetch_document(source_path)
+        document = await fetcher.fetch(connector, provider_id, source_path)
     except ProviderError as exc:
         _raise_for_provider_error(exc, provider_id)
     return Response(
-        content=body,
+        content=document.body,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="{_sanitise_filename(source_path)}"',
-            # Milestone 9 has no caching anywhere; make that explicit to
-            # intermediaries and the client.
+            # The client never stores documents; any caching happens
+            # server-side under revalidation (ADR 0015).
             "Cache-Control": "no-store",
+            # Honest labelling, consistent with data_origin on search
+            # results: whether this copy came from the provider just now or
+            # from the server cache, and how stale it may be.
+            "X-Document-Origin": document.origin,
+            "X-Document-Age-Seconds": str(int(document.age_seconds)),
         },
     )

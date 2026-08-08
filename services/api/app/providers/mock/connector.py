@@ -222,7 +222,9 @@ class MockProviderConnector(ProviderConnector):
             raise InvalidDocumentReference("mock document reference is invalid")
         return _sample_documents()
 
-    async def fetch_document(self, source_path: str) -> bytes:
+    async def fetch_document(
+        self, source_path: str, *, conditional: dict[str, str] | None = None
+    ) -> bytes:
         if self._fail_with is not None:
             raise self._fail_with
         known = {doc.source_path for doc in _sample_documents() if doc.available}

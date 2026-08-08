@@ -76,9 +76,11 @@ class FakeStreamClient:
     def __init__(self, results: list) -> None:
         self._results = list(results)
         self.requests: list[str] = []
+        self.request_headers: list[dict[str, str] | None] = []
 
-    def stream(self, method: str, url: str) -> _StreamCtx:
+    def stream(self, method: str, url: str, headers: dict[str, str] | None = None) -> _StreamCtx:
         self.requests.append(url)
+        self.request_headers.append(headers)
         return _StreamCtx(self._results.pop(0))
 
 
@@ -586,7 +588,9 @@ async def test_single_flight_concurrency_is_enforced() -> None:
     class ConcurrencyClient:
         requests: list[str] = []
 
-        def stream(self, method: str, url: str) -> _StreamCtx:
+        def stream(
+            self, method: str, url: str, headers: dict[str, str] | None = None
+        ) -> _StreamCtx:
             return _StreamCtx(ConcurrencyResponse(200))
 
     transport = SessionTransport(

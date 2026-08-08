@@ -63,11 +63,15 @@ class ProviderConnector(ABC):
             f"provider '{self.provider_id}' does not support document retrieval"
         )
 
-    async def fetch_document(self, source_path: str) -> bytes:
+    async def fetch_document(
+        self, source_path: str, *, conditional: dict[str, str] | None = None
+    ) -> bytes:
         """Return one validated document's bytes for a `source_path` from
         this provider's own `ProviderDocumentInfo`. Implementers MUST
         validate the path shape (fail closed) and MUST return only validated
-        document content. Default: unsupported."""
+        document content. `conditional` carries HTTP validators for cache
+        revalidation; implementations that support it raise `NotModified`
+        when the provider reports 304. Default: unsupported."""
         raise ProviderDocumentsUnsupported(
             f"provider '{self.provider_id}' does not support document retrieval"
         )
