@@ -26,6 +26,11 @@ services:
       ALLIANCE_MODE: ${ALLIANCE_MODE:-fixture}
       ALLIANCE_ACCESS_APPROVED: ${ALLIANCE_ACCESS_APPROVED:-false}
       ALLIANCE_SESSION_PATH: /run/secrets/alliance-session.json
+      # Session keepalive: off unless explicitly enabled (Milestone 11).
+      ALLIANCE_KEEPALIVE_ENABLED: ${ALLIANCE_KEEPALIVE_ENABLED:-false}
+      ALLIANCE_KEEPALIVE_INTERVAL_SECONDS: ${ALLIANCE_KEEPALIVE_INTERVAL_SECONDS:-900}
+      # Emergency stop for all live provider access.
+      ALLIANCE_LIVE_KILL_SWITCH: ${ALLIANCE_LIVE_KILL_SWITCH:-false}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
       # The operator-bootstrapped session file, mounted read-only from the
