@@ -23,6 +23,28 @@ jobs:
           uv venv --python 3.12
           uv pip install -e ".[dev]"
 
+      # The Docker image installs from requirements.txt while development and
+      # CI use pyproject.toml. A dependency added to one but not the other
+      # builds fine and then crashes on deploy — this happened with
+      # `cryptography`. Assert every declared dependency is actually pinned
+      # in requirements.txt. (Deliberately not a full recompile-and-diff:
+      # `uv pip compile` resolves to the latest releases each run, so that
+      # would fail whenever any upstream package publishes a new version.)
+      - name: Every dependency is pinned in requirements.txt
+        run: |
+          python3 - <<'PY'
+          import re, sys, tomllib
+          declared = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
+          names = [re.split(r"[<>=!~\[; ]", d)[0].strip().lower() for d in declared]
+          pinned = open("requirements.txt").read().lower()
+          missing = [n for n in names if not re.search(rf"^{re.escape(n)}==", pinned, re.M)]
+          if missing:
+              print(f"::error::missing from requirements.txt: {', '.join(missing)} — "
+                    "run: uv pip compile pyproject.toml -o requirements.txt")
+              sys.exit(1)
+          print(f"all {len(names)} declared dependencies are pinned")
+          PY
+
       - name: Lint (ruff check)
         run: uv run ruff check .
 
