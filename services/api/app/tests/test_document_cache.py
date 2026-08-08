@@ -209,6 +209,48 @@ class TestFallbackWhenProviderUnavailable:
             await _fetcher(cache, clock).fetch(connector, "alliance", PATH)
 
 
+class TestCacheFailuresNeverBreakServing:
+    """An unwritable or unreadable cache is an operational problem, never a
+    reason to fail the document a technician asked for. (A root-owned Docker
+    volume caused exactly this in deployment: HTTP 500 instead of the PDF.)"""
+
+    async def test_unwritable_cache_still_serves_the_document(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _Clock()
+        cache = _cache(tmp_path, clock)
+
+        def boom(*args, **kwargs):
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(cache, "put", boom)
+        result = await _fetcher(cache, clock).fetch(_FakeConnector(), "alliance", PATH)
+        assert result.body == PDF and result.origin == "live"
+
+    async def test_unreadable_cache_falls_back_to_a_plain_fetch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clock = _Clock()
+        cache = _cache(tmp_path, clock)
+
+        def boom(*args, **kwargs):
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(cache, "get", boom)
+        connector = _FakeConnector()
+        result = await _fetcher(cache, clock).fetch(connector, "alliance", PATH)
+        assert result.body == PDF
+        assert connector.calls == [None]  # no validators, since nothing was read
+
+    async def test_unexpected_304_without_a_cached_copy_is_not_swallowed(
+        self, tmp_path: Path
+    ) -> None:
+        clock = _Clock()
+        connector = _FakeConnector(raises=NotModified("304 with no validators sent"))
+        with pytest.raises(NotModified):
+            await _fetcher(_cache(tmp_path, clock), clock).fetch(connector, "alliance", PATH)
+
+
 class TestCacheDisabled:
     async def test_pass_through_when_no_cache(self, tmp_path: Path) -> None:
         clock = _Clock()

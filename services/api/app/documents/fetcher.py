@@ -70,13 +70,25 @@ class CachingDocumentFetcher:
             return FetchedDocument(await connector.fetch_document(source_path), origin="live")
 
         key = DocumentCache.key(provider_id, source_path)
-        cached = self._cache.get(key)
+        # A broken cache degrades to a plain fetch; it never fails a request.
+        try:
+            cached = self._cache.get(key)
+        except OSError as exc:
+            logger.warning(
+                "document cache unreadable; fetching directly",
+                extra={"provider": provider_id, "error": type(exc).__name__},
+            )
+            cached = None
         conditional = _conditional_headers(cached)
 
         try:
             body = await connector.fetch_document(source_path, conditional=conditional)
         except NotModified:
             # Provider confirms our copy is current: serve it, no transfer.
+            if cached is None:
+                # We sent no validators, so a 304 makes no sense — treat it
+                # as a provider fault rather than serving nothing.
+                raise
             self._cache.mark_revalidated(key)
             logger.info("document served from cache (revalidated)", extra={"provider": provider_id})
             return FetchedDocument(cached.body, origin="cached", age_seconds=0.0)
@@ -104,14 +116,23 @@ class CachingDocumentFetcher:
             )
             return FetchedDocument(cached.body, origin="cached", age_seconds=age)
 
-        # Fresh copy (new, or the provider revised it).
+        # Fresh copy (new, or the provider revised it). A cache write must
+        # never break serving the document the technician asked for — an
+        # unwritable cache directory is an operational problem, not a
+        # reason to fail the request.
         validators = getattr(connector, "last_document_validators", {}) or {}
-        self._cache.put(
-            key,
-            body,
-            etag=validators.get("etag"),
-            last_modified=validators.get("last_modified"),
-        )
+        try:
+            self._cache.put(
+                key,
+                body,
+                etag=validators.get("etag"),
+                last_modified=validators.get("last_modified"),
+            )
+        except OSError as exc:
+            logger.warning(
+                "could not cache document; serving it anyway",
+                extra={"provider": provider_id, "error": type(exc).__name__},
+            )
         return FetchedDocument(body, origin="live")
 
 

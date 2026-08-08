@@ -14,6 +14,13 @@ COPY app ./app
 
 # Run as a non-root user.
 RUN useradd --create-home apiuser
+
+# Create the document-cache directory owned by that user. A named volume
+# mounted here inherits this ownership when first initialised — without it
+# the volume is root-owned and the app cannot write to it.
+RUN mkdir -p /var/cache/laundryconnect/documents \
+    && chown -R apiuser:apiuser /var/cache/laundryconnect
+
 USER apiuser
 
 EXPOSE 8000
