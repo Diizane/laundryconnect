@@ -17,6 +17,14 @@ _FAULT_CODE_RE = re.compile(r"^[EF][-:]?\d{1,3}$", re.IGNORECASE)
 # Long, purely numeric strings read as serial numbers.
 _SERIAL_MIN_DIGITS = 7
 
+# Alliance serials also come in a digits-then-letters form, e.g.
+# 135RX009281WK. They start with a digit and are long; part numbers in the
+# same catalogue start with letters (SP533157, M412025P, D0568) or are
+# shorter all-digit codes (581680, 44315101). Field report 2026-08-08: a
+# serial like this was being classified as a part number, so it never
+# reached the provider's serial endpoint and returned the wrong machine.
+_MIXED_SERIAL_MIN_LENGTH = 10
+
 # Long letter+digit strings without separators read as part numbers.
 _PART_MIN_LENGTH = 7
 
@@ -41,6 +49,9 @@ def detect_query_type(query: str, requested: QueryType) -> QueryType:
     if "-" in q and has_letters and has_digits:
         # Dashed alphanumerics (HS-6008, UW65-PV) are usually model numbers.
         return QueryType.MODEL
+    if has_letters and has_digits and q[0].isdigit() and len(q) >= _MIXED_SERIAL_MIN_LENGTH:
+        # Digits-first alphanumerics of serial length: 135RX009281WK.
+        return QueryType.SERIAL
     if has_letters and has_digits and len(q) >= _PART_MIN_LENGTH:
         return QueryType.PART
     if has_letters and len(q) <= 10:
