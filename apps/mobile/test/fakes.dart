@@ -155,6 +155,15 @@ DocumentContents sampleContents({
 
 final samplePdfBytes = Uint8List.fromList('%PDF-1.4 fake'.codeUnits);
 
+DownloadedDocument sampleDownload({
+  String origin = 'live',
+  int ageSeconds = 0,
+}) => DownloadedDocument(
+  bytes: samplePdfBytes,
+  origin: origin,
+  ageSeconds: ageSeconds,
+);
+
 DocumentDiscovery sampleDiscovery({String tokenSuffix = ''}) =>
     DocumentDiscovery(
       providerId: 'alliance',
@@ -196,7 +205,8 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
 
   Future<DocumentDiscovery> Function(String providerId, String ref)?
   discoverHandler;
-  Future<Uint8List> Function(String providerId, String token)? downloadHandler;
+  Future<DownloadedDocument> Function(String providerId, String token)?
+  downloadHandler;
   Future<DocumentContents> Function(String providerId, String token)?
   contentsHandler;
   Future<DocumentSearchResults> Function(
@@ -220,11 +230,11 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
   }
 
   @override
-  Future<Uint8List> downloadDocument(String providerId, String token) {
+  Future<DownloadedDocument> downloadDocument(String providerId, String token) {
     downloadCalls.add(token);
     final handler = downloadHandler;
     if (handler != null) return handler(providerId, token);
-    return Future.value(samplePdfBytes);
+    return Future.value(sampleDownload());
   }
 
   @override

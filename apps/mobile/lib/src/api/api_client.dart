@@ -96,9 +96,10 @@ abstract interface class DocumentsApi {
 abstract interface class ProviderDocumentsApi {
   Future<DocumentDiscovery> discoverDocuments(String providerId, String ref);
 
-  /// Downloads one PDF's bytes via the backend proxy. Nothing is persisted
-  /// by this client; callers hold the bytes in memory only.
-  Future<Uint8List> downloadDocument(String providerId, String token);
+  /// Downloads one PDF via the backend proxy, reporting whether the bytes
+  /// came from the provider or from the server's stored copy. Nothing is
+  /// persisted by this client; callers hold the bytes in memory only.
+  Future<DownloadedDocument> downloadDocument(String providerId, String token);
 
   /// Page count, whether the document can be searched, and its embedded
   /// contents with page numbers (Milestone 13).
@@ -241,7 +242,7 @@ class _BackendClient {
 
   /// Fetch binary content (the PDF proxy). Verifies the declared content
   /// type so an unexpected body is never handed to a viewer.
-  Future<Uint8List> requestBytes(
+  Future<({Uint8List bytes, Map<String, String> headers})> requestBytes(
     String path, {
     required String expectedContentType,
     Duration? timeout,
@@ -256,7 +257,7 @@ class _BackendClient {
         kind: ApiErrorKind.providerFailure,
       );
     }
-    return response.bodyBytes;
+    return (bytes: response.bodyBytes, headers: response.headers);
   }
 }
 
@@ -345,12 +346,24 @@ class HttpProviderDocumentsApi implements ProviderDocumentsApi {
   }
 
   @override
-  Future<Uint8List> downloadDocument(String providerId, String token) =>
-      _backend.requestBytes(
-        '/api/v1/providers/$providerId/documents/$token',
-        expectedContentType: 'application/pdf',
-        timeout: _downloadTimeout,
-      );
+  Future<DownloadedDocument> downloadDocument(
+    String providerId,
+    String token,
+  ) async {
+    final response = await _backend.requestBytes(
+      '/api/v1/providers/$providerId/documents/$token',
+      expectedContentType: 'application/pdf',
+      timeout: _downloadTimeout,
+    );
+    return DownloadedDocument(
+      bytes: response.bytes,
+      // Absent headers mean an older backend: treat as live rather than
+      // inventing staleness.
+      origin: response.headers['x-document-origin'] ?? 'live',
+      ageSeconds:
+          int.tryParse(response.headers['x-document-age-seconds'] ?? '') ?? 0,
+    );
+  }
 
   @override
   Future<DocumentContents> documentContents(

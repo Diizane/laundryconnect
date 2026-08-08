@@ -7,6 +7,7 @@ import 'fakes.dart';
 /// The viewer's search and contents behaviour, exercised through the API
 /// contract rather than the PDF renderer (which needs a real platform).
 void main() {
+  _cachedOriginTests();
   group('document contents model', () {
     test('parses backend contents payload', () {
       final contents = DocumentContents.fromJson(const {
@@ -105,6 +106,49 @@ void main() {
       await expectLater(
         api.searchWithinDocument('alliance', 't', 'belt'),
         throwsA(isA<ApiException>()),
+      );
+    });
+  });
+}
+
+void _cachedOriginTests() {
+  group('cached origin labelling', () {
+    test('a live document is not flagged', () {
+      final doc = sampleDownload();
+      expect(doc.isCached, isFalse);
+      expect(doc.isStale, isFalse);
+    });
+
+    test('a revalidated cached copy is not treated as stale', () {
+      // The provider confirmed it is current, so there is nothing to warn
+      // about even though the bytes came from the cache.
+      final doc = sampleDownload(origin: 'cached');
+      expect(doc.isCached, isTrue);
+      expect(doc.isStale, isFalse);
+    });
+
+    test('an unvalidated cached copy is flagged with its age', () {
+      final doc = sampleDownload(origin: 'cached', ageSeconds: 3 * 86400);
+      expect(doc.isStale, isTrue);
+      expect(doc.ageLabel, '3 days old');
+    });
+
+    test('age wording covers hours and singulars', () {
+      expect(
+        sampleDownload(origin: 'cached', ageSeconds: 3600).ageLabel,
+        '1 hour old',
+      );
+      expect(
+        sampleDownload(origin: 'cached', ageSeconds: 7200).ageLabel,
+        '2 hours old',
+      );
+      expect(
+        sampleDownload(origin: 'cached', ageSeconds: 86400).ageLabel,
+        '1 day old',
+      );
+      expect(
+        sampleDownload(origin: 'cached', ageSeconds: 60).ageLabel,
+        'just now',
       );
     });
   });
