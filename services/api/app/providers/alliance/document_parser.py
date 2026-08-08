@@ -228,9 +228,68 @@ class DrawingContent:
         return bool(self.svg)
 
 
-# The diagram is an inline SVG sized in inches (the zoom-control icons are
-# small pixel-sized SVGs, so the diagram is identified by its dimensions).
-_DIAGRAM_SVG = re.compile(r"<svg[^>]*\bwidth=\"[\d.]+in\"[^>]*>.*?</svg>", re.S | re.I)
+# Drawing pages carry several inline SVGs: the diagram plus the zoom-control
+# icons. The diagram used to be identified by a width in inches, but the
+# portal exports drawings from more than one CAD pipeline: measured across
+# the 34 IA135 drawings, widths were "7.74in", "13.63cm", "502.941px" or
+# absent altogether, and that rule found a diagram on only 14 of them.
+#
+# What does separate them cleanly is how much geometry they contain. In the
+# same measurement the diagrams held 22–6,526 drawing elements while no
+# icon held more than 2, so the threshold below sits in a wide empty gap
+# rather than on a boundary. Group ids are NOT used: they vary too
+# ("parts"/"callouts" in one pipeline, a bare "Layer_1" in another).
+_MIN_DIAGRAM_ELEMENTS = 10
+
+_SVG_OPEN = re.compile(r"<svg\b[^>]*>", re.I)
+_SVG_CLOSE = re.compile(r"</svg\s*>", re.I)
+_DRAWING_ELEMENT = re.compile(r"<(?:path|polyline|polygon)\b", re.I)
+
+
+def _svg_blocks(text: str) -> list[str]:
+    """Every balanced top-level <svg>…</svg> block, in document order.
+
+    Balanced rather than shortest-match: a non-greedy regex would truncate
+    a diagram at the first nested </svg>.
+    """
+    events = sorted(
+        [(m.start(), 0, m) for m in _SVG_OPEN.finditer(text)]
+        + [(m.start(), 1, m) for m in _SVG_CLOSE.finditer(text)]
+    )
+    blocks: list[str] = []
+    depth = 0
+    start = 0
+    for _position, kind, match in events:
+        if kind == 0:
+            if depth == 0:
+                start = match.start()
+            depth += 1
+        elif depth:
+            depth -= 1
+            if depth == 0:
+                blocks.append(text[start : match.end()])
+    return blocks
+
+
+def extract_diagram(text: str) -> str:
+    """The one SVG on a drawing page that is the diagram, or "" if unclear.
+
+    Fail closed on ambiguity: showing the wrong diagram would put a
+    technician on the wrong assembly, which is worse than showing none.
+    """
+    candidates = [
+        block
+        for block in _svg_blocks(text)
+        if len(_DRAWING_ELEMENT.findall(block)) >= _MIN_DIAGRAM_ELEMENTS
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        logger.warning(
+            "alliance drawing page: several diagram candidates, showing none",
+            extra={"candidates": len(candidates)},
+        )
+    return ""
 
 
 def parse_drawing_page(body: bytes) -> DrawingContent:
@@ -243,8 +302,7 @@ def parse_drawing_page(body: bytes) -> DrawingContent:
     table yields empty values rather than an error.
     """
     text = body.decode("utf-8", "ignore")
-    match = _DIAGRAM_SVG.search(text)
-    svg = match.group(0) if match else ""
+    svg = extract_diagram(text)
     if not svg:
         logger.warning("alliance drawing page: no diagram found")
 

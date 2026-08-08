@@ -23,6 +23,12 @@ from app.providers.models import DataOrigin
 FIXTURES = Path(__file__).parent.parent / "providers" / "alliance" / "fixtures"
 
 
+def _geometry(count: int) -> bytes:
+    """`count` drawing elements — enough to look like a diagram rather than
+    a zoom-control icon."""
+    return b"".join(b'<path d="M%d %d"/>' % (i, i) for i in range(count))
+
+
 def _fixture_settings(**overrides) -> Settings:
     return Settings(_env_file=None, alliance_mode="fixture", **overrides)
 
@@ -325,14 +331,14 @@ class TestDrawingParsing:
         assert "SearchString" not in path and "SearchAction" not in path
         assert "DrawingId=548226" in path and "ManualId=16774" in path
 
-    def test_diagram_is_the_inch_sized_svg_not_the_zoom_icons(self) -> None:
+    def test_diagram_is_the_svg_with_geometry_not_the_zoom_icons(self) -> None:
         from app.providers.alliance.document_parser import parse_drawing_page
 
         html = (
             b'<html><body><svg class="zoom-button-svg" width="24" height="24">'
             b'<path d="M1 1"/></svg>'
             b'<svg xmlns="http://www.w3.org/2000/svg" width="7.74in" height="9.71in">'
-            b'<g id="callouts"><line x1="1" y1="2" x2="3" y2="4"/></g></svg>'
+            b'<g id="callouts">' + _geometry(30) + b"</g></svg>"
             b"<table><tr><td>8</td><td>SP533157</td><td>Belt</td><td></td></tr></table></body></html>"
         )
         drawing = parse_drawing_page(html)
@@ -341,6 +347,64 @@ class TestDrawingParsing:
         assert [(p.reference, p.part_number, p.description) for p in drawing.parts] == [
             ("8", "SP533157", "Belt")
         ]
+
+    @pytest.mark.parametrize(
+        "attributes",
+        [
+            b'width="7.74in" height="9.71in"',  # one CAD pipeline
+            b'width="13.63cm" height="9.5cm"',  # another: centimetres
+            b'width="502.941px"',  # and pixels
+            b'version="1.1" x="0px" y="0px" viewBox="0 0 504 608.4"',  # no width at all
+        ],
+    )
+    def test_diagram_is_found_whatever_units_the_export_used(self, attributes: bytes) -> None:
+        """Drawings come from several CAD pipelines. Keying off a width in
+        inches found a diagram on only 14 of the 34 IA135 drawings; the rest
+        showed "No diagram available" in the app despite having one."""
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b'<html><body><svg class="zoom-button-svg" width="24" height="24">'
+            b'<path d="M1 1"/></svg>'
+            b"<svg " + attributes + b">" + _geometry(30) + b"</svg></body></html>"
+        )
+        assert parse_drawing_page(html).has_diagram
+
+    def test_a_page_of_only_icons_yields_no_diagram(self) -> None:
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b'<html><body><svg class="zoom-button-svg" width="24"><path d="M1 1"/>'
+            b'<path d="M2 2"/></svg>'
+            b'<svg class="zoom-button-svg" width="23"><polyline points="1,2 3,4"/></svg>'
+            b"</body></html>"
+        )
+        assert parse_drawing_page(html).has_diagram is False
+
+    def test_two_diagram_candidates_yield_none(self) -> None:
+        """Fail closed: showing the wrong assembly is worse than showing
+        nothing, so an ambiguous page renders no diagram."""
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b"<html><body><svg>" + _geometry(30) + b"</svg>"
+            b"<svg>" + _geometry(30) + b"</svg></body></html>"
+        )
+        assert parse_drawing_page(html).has_diagram is False
+
+    def test_a_nested_svg_does_not_truncate_the_diagram(self) -> None:
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b"<html><body><svg>"
+            + _geometry(20)
+            + b"<svg><path d='M9 9'/></svg>"
+            + _geometry(20)
+            + b"</svg></body></html>"
+        )
+        svg = parse_drawing_page(html).svg
+        assert svg.count("<path") == 41  # both outer runs plus the nested one
+        assert svg.endswith("</svg>")
 
     def test_missing_diagram_yields_empty_not_an_error(self) -> None:
         from app.providers.alliance.document_parser import parse_drawing_page
