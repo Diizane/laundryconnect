@@ -36,6 +36,7 @@ class FakeStreamResponse:
         content_length: int | None = None,
         retry_after: str | None = None,
         content_type: str | None = None,
+        etag: str | None = None,
     ) -> None:
         self.status_code = status_code
         self._chunks = chunks if chunks is not None else [b'{"records": []}']
@@ -50,6 +51,8 @@ class FakeStreamResponse:
             self.headers["retry-after"] = retry_after
         if content_type is not None:
             self.headers["content-type"] = content_type
+        if etag is not None:
+            self.headers["etag"] = etag
 
     async def aiter_bytes(self, chunk_size: int = 65536) -> AsyncIterator[bytes]:
         for chunk in self._chunks:
@@ -180,6 +183,49 @@ class TestSerialSearchRouting:
         client = FakeStreamClient([FakeStreamResponse(200)])
         await self._transport(client).search_raw("135RX 009281/WK", QueryType.SERIAL)
         assert "searchString=135RX%20009281%2FWK" in client.requests[0]
+
+
+async def test_conditional_headers_are_passed_as_a_keyword() -> None:
+    """httpx's `stream()` takes headers keyword-only; its third positional
+    slot is `content`. Passing positionally raised TypeError against real
+    httpx while fakes accepted it — caught only in deployment. The fakes are
+    now keyword-only too, so this test fails if the call regresses."""
+    client = FakeStreamClient(
+        [FakeStreamResponse(200, chunks=[b"%PDF-1.4 x"], content_type="application/pdf")]
+    )
+    conditional = {"If-None-Match": '"v1"'}
+    await _transport(client).fetch_document(
+        "https://portal.alliancels.net/manuals/Production/D0568.pdf",
+        conditional=conditional,
+    )
+    assert client.request_headers == [conditional]
+
+
+async def test_304_raises_not_modified_without_reading_a_body() -> None:
+    from app.providers.alliance.transport import NotModified
+
+    response = FakeStreamResponse(304, chunks=[b"should not be read"])
+    client = FakeStreamClient([response])
+    with pytest.raises(NotModified):
+        await _transport(client).fetch_document(
+            "https://portal.alliancels.net/manuals/Production/D0568.pdf",
+            conditional={"If-None-Match": '"v1"'},
+        )
+    assert response.chunks_yielded == 0  # no transfer: that is the point
+    assert len(client.requests) == 1  # terminal, never retried
+
+
+async def test_document_validators_are_captured_for_the_cache() -> None:
+    client = FakeStreamClient(
+        [
+            FakeStreamResponse(
+                200, chunks=[b"%PDF-1.4 x"], content_type="application/pdf", etag='"abc123"'
+            )
+        ]
+    )
+    transport = _transport(client)
+    await transport.fetch_document("https://portal.alliancels.net/manuals/P/D.pdf")
+    assert transport.last_document_validators["etag"] == '"abc123"'
 
 
 async def test_parts_connection_host_allowed_and_query_encoded() -> None:
@@ -589,7 +635,7 @@ async def test_single_flight_concurrency_is_enforced() -> None:
         requests: list[str] = []
 
         def stream(
-            self, method: str, url: str, headers: dict[str, str] | None = None
+            self, method: str, url: str, *, headers: dict[str, str] | None = None
         ) -> _StreamCtx:
             return _StreamCtx(ConcurrencyResponse(200))
 

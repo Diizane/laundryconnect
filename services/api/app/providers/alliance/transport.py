@@ -119,7 +119,7 @@ class StreamResponse(Protocol):
 
 class StreamingClient(Protocol):
     def stream(
-        self, method: str, url: str, headers: dict[str, str] | None = None
+        self, method: str, url: str, *, headers: dict[str, str] | None = None
     ) -> AbstractAsyncContextManager[StreamResponse]: ...
 
 
@@ -365,7 +365,7 @@ class SessionTransport:
             for attempt in range(self._max_retries + 1):
                 await self._rate_limiter.acquire()
                 try:
-                    async with self._client.stream("GET", url, conditional) as response:
+                    async with self._client.stream("GET", url, headers=conditional) as response:
                         status = response.status_code
                         if status == 304:
                             # Provider confirms the caller's copy is current.
