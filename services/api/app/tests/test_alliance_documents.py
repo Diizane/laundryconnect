@@ -284,3 +284,67 @@ class TestSessionModeGates:
         connector = AllianceConnector(settings=Settings(_env_file=None, alliance_mode="credential"))
         with pytest.raises(LiveModeRefused):
             await connector.discover_documents("1001:2002")
+
+
+class TestDrawingParsing:
+    """Assembly drawings (Milestone 15)."""
+
+    def test_nested_layout_row_does_not_become_a_drawing(self) -> None:
+        # Production nests the drawing table inside a layout table; the
+        # wrapper row's text is every drawing name concatenated, which
+        # produced a bogus first entry titled with the whole list.
+        def row(drawing_id: str, name: str) -> bytes:
+            return (
+                b'<tr><td><a href="/en/Manual/Drawing?DrawingId='
+                + drawing_id.encode()
+                + b'&ManualId=2&ModelId=3">Click to view drawing.</a></td><td>'
+                + name.encode()
+                + b"</td></tr>"
+            )
+
+        html = (
+            b"<html><body><table><tr><td><table>"
+            + row("1", "Serial Label")
+            + row("2", "Drive")
+            + b"</table></td></tr></table></body></html>"
+        )
+        drawings = parse_manual_page(html).drawings
+        assert [(d.drawing_id, d.title) for d in drawings] == [
+            ("1", "Serial Label"),
+            ("2", "Drive"),
+        ]
+
+    def test_drawing_paths_keep_only_catalog_identifiers(self) -> None:
+        html = (
+            b'<html><body><table><tr><td><a href="/en/Manual/Drawing?Index=57&DrawingId=548226'
+            b'&ManualId=16774&ModelId=430362&SearchString=135RX009281WK&SearchAction=BySerial">'
+            b"Click to view drawing.</a></td><td>Drive</td></tr></table></body></html>"
+        )
+        path = parse_manual_page(html).drawings[0].source_path
+        # Search echoes must not be carried into a stored path.
+        assert "SearchString" not in path and "SearchAction" not in path
+        assert "DrawingId=548226" in path and "ManualId=16774" in path
+
+    def test_diagram_is_the_inch_sized_svg_not_the_zoom_icons(self) -> None:
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b'<html><body><svg class="zoom-button-svg" width="24" height="24">'
+            b'<path d="M1 1"/></svg>'
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="7.74in" height="9.71in">'
+            b'<g id="callouts"><line x1="1" y1="2" x2="3" y2="4"/></g></svg>'
+            b"<table><tr><td>8</td><td>SP533157</td><td>Belt</td><td></td></tr></table></body></html>"
+        )
+        drawing = parse_drawing_page(html)
+        assert drawing.has_diagram
+        assert "zoom-button" not in drawing.svg
+        assert [(p.reference, p.part_number, p.description) for p in drawing.parts] == [
+            ("8", "SP533157", "Belt")
+        ]
+
+    def test_missing_diagram_yields_empty_not_an_error(self) -> None:
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        drawing = parse_drawing_page(b"<html><body><p>nothing here</p></body></html>")
+        assert drawing.has_diagram is False
+        assert drawing.parts == []
