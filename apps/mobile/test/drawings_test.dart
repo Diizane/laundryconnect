@@ -76,20 +76,27 @@ void main() {
       expect(drawing.partFor('99'), isNull);
     });
 
-    test('a drawing whose export does not label callouts is not interactive', () {
-      // One of the provider's export pipelines draws callouts anonymously.
-      // Those drawings stay viewable and searchable, just not tappable.
-      final drawing = DrawingDetail.fromJson(const {
-        'svg': '<svg viewBox="0 0 100 100"></svg>',
-        'view_box': [0, 0, 100, 100],
-        'callouts': <Map<String, dynamic>>[],
-        'parts': [
-          {'reference': '8', 'part_number': 'SP533157', 'description': 'Belt'},
-        ],
-      });
-      expect(drawing.hasDiagram, isTrue);
-      expect(drawing.isInteractive, isFalse);
-    });
+    test(
+      'a drawing whose export does not label callouts is not interactive',
+      () {
+        // One of the provider's export pipelines draws callouts anonymously.
+        // Those drawings stay viewable and searchable, just not tappable.
+        final drawing = DrawingDetail.fromJson(const {
+          'svg': '<svg viewBox="0 0 100 100"></svg>',
+          'view_box': [0, 0, 100, 100],
+          'callouts': <Map<String, dynamic>>[],
+          'parts': [
+            {
+              'reference': '8',
+              'part_number': 'SP533157',
+              'description': 'Belt',
+            },
+          ],
+        });
+        expect(drawing.hasDiagram, isTrue);
+        expect(drawing.isInteractive, isFalse);
+      },
+    );
 
     test('callouts without a coordinate space are not interactive', () {
       final drawing = DrawingDetail.fromJson(const {

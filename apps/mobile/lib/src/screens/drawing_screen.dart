@@ -305,9 +305,7 @@ class _CalloutTarget extends StatelessWidget {
               shape: BoxShape.circle,
               // The provider's own SVG already draws the marker; this only
               // shows which one is selected.
-              border: highlighted
-                  ? Border.all(color: colour, width: 2)
-                  : null,
+              border: highlighted ? Border.all(color: colour, width: 2) : null,
               color: highlighted ? colour.withValues(alpha: 0.2) : null,
             ),
           ),
