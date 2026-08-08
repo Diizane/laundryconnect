@@ -55,6 +55,44 @@ const sampleResponseJson = '''
 ''';
 
 void main() {
+  group('the model a serial resolved to', () {
+    SearchResult result(Map<String, String> metadata) => SearchResult(
+      providerId: 'alliance',
+      sourceReference: 'als-model-430362',
+      resultType: 'model',
+      dataOrigin: 'live',
+      title: 'IAY135J',
+      model: 'IAY135J',
+      metadata: metadata,
+    );
+
+    test('is the full model number, not the family', () {
+      final machine = result(const {'resolved_model': 'IAY135JQEM11B0C0AA'});
+      expect(machine.resolvedModel, 'IAY135JQEM11B0C0AA');
+      expect(machine.bestModel, 'IAY135JQEM11B0C0AA');
+    });
+
+    test('is absent when the search did not start from a serial', () {
+      expect(result(const {}).resolvedModel, isNull);
+      expect(result(const {}).bestModel, 'IAY135J');
+    });
+
+    test('is not repeated when it only restates the family', () {
+      expect(result(const {'resolved_model': 'IAY135J'}).resolvedModel, isNull);
+    });
+
+    test('an empty value is treated as absent', () {
+      expect(result(const {'resolved_model': ''}).resolvedModel, isNull);
+    });
+
+    test('carries the serial it resolved from', () {
+      expect(
+        result(const {'resolved_serial': '135RX009281WK'}).resolvedSerial,
+        '135RX009281WK',
+      );
+    });
+  });
+
   _generationMatchTests();
   group('SearchResponse.fromJson', () {
     test('parses a full response', () {
