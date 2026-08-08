@@ -83,8 +83,17 @@ ALLIANCE_SESSION_PATH=~/.laundryconnect/alliance-session.json \
 # copy it to the server (never into the repo or the image)
 scp ~/.laundryconnect/alliance-session.json \
     server:/opt/laundryconnect/alliance-session.json
-ssh server 'chmod 600 /opt/laundryconnect/alliance-session.json'
+
+# The API container runs as a non-root user (uid 1000). The mounted file
+# must be readable by THAT uid, not the host login user — otherwise the app
+# cannot open it and reports SessionInvalid, which looks like an expired
+# session but is a permissions problem.
+ssh server 'sudo chown 1000:1000 /opt/laundryconnect/alliance-session.json && \
+            sudo chmod 600 /opt/laundryconnect/alliance-session.json'
 ```
+
+Both commands are wrapped in `scripts/refresh-session.sh` — run that after
+each bootstrap rather than remembering the ownership step.
 
 Portal sessions expire in the order of hours-to-days. When they do, the API
 returns its normal `reauthentication_required` state and the app shows the
