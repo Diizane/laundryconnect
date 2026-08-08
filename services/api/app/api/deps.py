@@ -1,14 +1,21 @@
 """Shared FastAPI dependencies for route modules."""
 
+import logging
 from collections.abc import AsyncIterator
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.documents.cache import DocumentCache
+from app.documents.fetcher import CachingDocumentFetcher
 from app.providers.registry import ProviderRegistry
 from app.search.service import SearchService
+
+logger = logging.getLogger(__name__)
 
 
 def get_provider_registry(request: Request) -> ProviderRegistry:
@@ -47,3 +54,31 @@ def get_search_service(registry: RegistryDep, settings: SettingsDep) -> SearchSe
 
 
 SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
+
+
+@lru_cache
+def _document_cache_for(path: str, max_bytes: int) -> DocumentCache:
+    """One cache instance per configured location (cheap; holds no state
+    beyond the directory)."""
+    return DocumentCache(Path(path), max_bytes=max_bytes)
+
+
+def get_document_fetcher(settings: SettingsDep) -> CachingDocumentFetcher:
+    """Cache-aware document retrieval. With caching disabled this is a
+    straight pass-through to the provider, preserving prior behaviour."""
+    cache = None
+    if settings.document_cache_enabled:
+        try:
+            cache = _document_cache_for(
+                settings.document_cache_path, settings.document_cache_max_bytes
+            )
+        except OSError:
+            # An unusable cache directory must never break document serving.
+            logger.warning("document cache unavailable; serving without it")
+            cache = None
+    return CachingDocumentFetcher(
+        cache, max_stale_seconds=settings.document_cache_max_stale_seconds
+    )
+
+
+DocumentFetcherDep = Annotated[CachingDocumentFetcher, Depends(get_document_fetcher)]

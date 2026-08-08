@@ -190,7 +190,9 @@ class AllianceConnector(ProviderConnector):
             for record in records
         ]
 
-    async def fetch_document(self, source_path: str) -> bytes:
+    async def fetch_document(
+        self, source_path: str, *, conditional: dict[str, str] | None = None
+    ) -> bytes:
         """Fetch ONE document's bytes (validated PDF) via the transport. The
         caller (Phase 3 API) streams these to the client; nothing is
         persisted. The path shape is validated first (pure-local, fail
@@ -202,7 +204,12 @@ class AllianceConnector(ProviderConnector):
         if _DOCUMENT_PATH.match(source_path or "") is None:
             raise DocumentNotFound("no document at this location")
         transport = self._document_transport()
-        return await transport.fetch_document(self._resolve_path(source_path))
+        body = await transport.fetch_document(
+            self._resolve_path(source_path), conditional=conditional
+        )
+        # Surface the provider's cache validators for the caching layer.
+        self.last_document_validators = getattr(transport, "last_document_validators", {})
+        return body
 
     def _build_session_transport(self) -> AllianceTransport:
         """Construct the authenticated live transport. Reached only after the

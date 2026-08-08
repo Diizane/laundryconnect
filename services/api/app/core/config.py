@@ -78,6 +78,21 @@ class Settings(BaseSettings):
     # (tokens then do not survive restarts). Rotating it invalidates all
     # outstanding tokens.
     document_token_secret: str = ""
+
+    # --- Document cache (Milestone 12) --------------------------------------
+    # Stores documents the operator is entitled to download so repeat opens
+    # are instant and still work when the provider session has expired.
+    # A revalidating cache, not an archive: every hit is checked against the
+    # provider with If-None-Match/If-Modified-Since, and an unvalidated copy
+    # is served ONLY when the provider cannot answer — labelled `cached`
+    # with its age. OFF by default.
+    document_cache_enabled: bool = False
+    document_cache_path: str = "/var/cache/laundryconnect/documents"
+    document_cache_max_bytes: int = 2 * 1024 * 1024 * 1024  # 2 GB
+    # Longest a copy may be served without a successful revalidation. Manuals
+    # get revised, and a superseded procedure is a safety problem, not just a
+    # correctness one.
+    document_cache_max_stale_seconds: int = 90 * 24 * 3600  # 90 days
     # Token lifetime: long enough for discover → tap → download, short
     # enough that a leaked token goes stale quickly.
     document_token_ttl_seconds: int = 900  # 15 minutes
