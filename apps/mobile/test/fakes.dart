@@ -153,7 +153,11 @@ DocumentContents sampleContents({
       ],
 );
 
-DrawingDetail sampleDrawing({String? svg}) => DrawingDetail(
+DrawingDetail sampleDrawing({
+  String? svg,
+  List<DrawingCallout>? callouts,
+  List<double>? viewBox = const [0, 0, 100, 100],
+}) => DrawingDetail(
   svg:
       svg ??
       '<svg xmlns="http://www.w3.org/2000/svg" width="7.74in" height="9.71in" '
@@ -167,6 +171,13 @@ DrawingDetail sampleDrawing({String? svg}) => DrawingDetail(
     ),
     DrawingPart(reference: '8', partNumber: 'SP533157', description: 'Belt'),
   ],
+  callouts:
+      callouts ??
+      const [
+        DrawingCallout(reference: '7', x: 20, y: 20, radius: 9),
+        DrawingCallout(reference: '8', x: 80, y: 80, radius: 9),
+      ],
+  viewBox: viewBox,
 );
 
 final samplePdfBytes = Uint8List.fromList('%PDF-1.4 fake'.codeUnits);

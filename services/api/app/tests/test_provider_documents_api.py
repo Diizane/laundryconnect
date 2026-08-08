@@ -57,6 +57,12 @@ def _discover(client: TestClient, provider: str = "mock", ref: str = "SC60") -> 
 PROVIDER_INTERNALS = ("source_path", "/manuals/", "/mock/documents/", "alliancels", "ManualId")
 
 
+def _geometry(count: int) -> bytes:
+    """`count` drawing elements — enough to be taken for a diagram rather
+    than one of the page's zoom-control icons."""
+    return b"".join(b'<path d="M%d %d"/>' % (i, i) for i in range(count))
+
+
 class TestDiscovery:
     def test_mock_discovery_schema(self, client: TestClient) -> None:
         body = _discover(client)
@@ -329,8 +335,41 @@ class TestInDocumentSearchAndContents:
 
 
 class TestDrawings:
-    """Assembly drawings (Milestone 15 Phase 1): the diagram and its parts
-    list, with no callout-to-part mapping — see the discovery doc."""
+    """Assembly drawings (Milestone 15): the diagram, its parts list, and
+    the callout markers joining them — see the discovery doc."""
+
+    def test_drawing_response_carries_callouts_in_a_stated_coordinate_space(
+        self,
+    ) -> None:
+        """A callout position is meaningless without the space it is
+        measured in, so the two travel together."""
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b'<html><body><svg viewBox="0 0 100 200">' + _geometry(20) + b'<g id="callout_8">'
+            b'<circle cx="10" cy="20" r="5"/></g>'
+            b"</svg>"
+            b"<table><tr><td>8</td><td>SP533157</td><td>Belt</td></tr></table>"
+            b"</body></html>"
+        )
+        drawing = parse_drawing_page(html)
+        assert drawing.view_box == (0.0, 0.0, 100.0, 200.0)
+        assert [(c.reference, c.x, c.y) for c in drawing.callouts] == [("8", 10.0, 20.0)]
+
+    def test_a_callout_with_no_parts_row_is_dropped(self) -> None:
+        """It could not tell a technician anything, and would be a tap
+        target that answers wrongly."""
+        from app.providers.alliance.document_parser import parse_drawing_page
+
+        html = (
+            b'<html><body><svg viewBox="0 0 100 100">' + _geometry(20) + b'<g id="callout_8">'
+            b'<circle cx="10" cy="20" r="5"/></g>'
+            b'<g id="callout_99"><circle cx="30" cy="40" r="5"/></g>'
+            b"</svg>"
+            b"<table><tr><td>8</td><td>SP533157</td><td>Belt</td></tr></table>"
+            b"</body></html>"
+        )
+        assert [c.reference for c in parse_drawing_page(html).callouts] == ["8"]
 
     def test_alliance_fixture_lists_drawings(self, alliance_client: TestClient) -> None:
         body = alliance_client.get(

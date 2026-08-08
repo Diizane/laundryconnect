@@ -322,19 +322,65 @@ class DrawingPart {
   }
 }
 
-/// A drawing's vector diagram and its parts list.
+/// One numbered marker on a diagram, in the diagram's own coordinates.
 ///
-/// Callout numbers inside the diagram are vector outlines rather than text,
-/// so they are not tappable — the technician reads a number off the diagram
-/// and finds it in the list. Mapping them is a later milestone that needs
-/// validating first, because sending someone to the wrong part is costly.
+/// The backend only sends callouts whose number and position are both
+/// certain and which match a row in the parts list, so a marker here can be
+/// trusted to name the right part.
+class DrawingCallout {
+  const DrawingCallout({
+    required this.reference,
+    required this.x,
+    required this.y,
+    required this.radius,
+  });
+
+  final String reference;
+  final double x;
+  final double y;
+  final double radius;
+
+  factory DrawingCallout.fromJson(Map<String, dynamic> json) => DrawingCallout(
+    reference: json['reference'] as String,
+    x: (json['x'] as num).toDouble(),
+    y: (json['y'] as num).toDouble(),
+    radius: (json['radius'] as num).toDouble(),
+  );
+}
+
+/// A drawing's vector diagram, its parts list, and the markers joining them.
+///
+/// `viewBox` is the diagram's coordinate space — `[minX, minY, width,
+/// height]` — which the callout positions are expressed in. It is null when
+/// the diagram declares none, and then [callouts] is empty: without a
+/// coordinate space a tap cannot be placed, and a marker in the wrong place
+/// would name the wrong part.
 class DrawingDetail {
-  const DrawingDetail({required this.svg, this.parts = const []});
+  const DrawingDetail({
+    required this.svg,
+    this.parts = const [],
+    this.callouts = const [],
+    this.viewBox,
+  });
 
   final String svg;
   final List<DrawingPart> parts;
+  final List<DrawingCallout> callouts;
+  final List<double>? viewBox;
 
   bool get hasDiagram => svg.isNotEmpty;
+
+  /// Whether tapping the diagram can identify parts.
+  bool get isInteractive =>
+      hasDiagram && callouts.isNotEmpty && viewBox?.length == 4;
+
+  /// The part a callout refers to, or null if the list has no such row.
+  DrawingPart? partFor(String reference) {
+    for (final part in parts) {
+      if (part.reference == reference) return part;
+    }
+    return null;
+  }
 
   factory DrawingDetail.fromJson(Map<String, dynamic> json) => DrawingDetail(
     svg: json['svg'] as String? ?? '',
@@ -343,5 +389,13 @@ class DrawingDetail {
             ?.map((p) => DrawingPart.fromJson(p as Map<String, dynamic>))
             .toList() ??
         const [],
+    callouts:
+        (json['callouts'] as List<dynamic>?)
+            ?.map((c) => DrawingCallout.fromJson(c as Map<String, dynamic>))
+            .toList() ??
+        const [],
+    viewBox: (json['view_box'] as List<dynamic>?)
+        ?.map((v) => (v as num).toDouble())
+        .toList(),
   );
 }
