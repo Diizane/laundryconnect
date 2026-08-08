@@ -347,3 +347,59 @@ def parse_drawing_page(body: bytes) -> DrawingContent:
             extra={"dropped": len(geometry.callouts) - len(callouts)},
         )
     return DrawingContent(svg=svg, parts=parts, callouts=callouts, view_box=geometry.view_box)
+
+
+@dataclass
+class DrawingSection:
+    """One drawing's title and parts list, from the combined print page."""
+
+    title: str
+    parts: list[DrawingPart] = field(default_factory=list)
+
+
+# The print page carries every diagram inline, which makes it enormous
+# (41 MB for the IA135) while the part of it we want is a few hundred
+# kilobytes. Dropping the diagrams before parsing turns it into something a
+# small server can handle.
+_INLINE_SVG = re.compile(r"<svg\b.*?</svg\s*>", re.S | re.I)
+
+
+def parse_drawings_print(body: bytes) -> list[DrawingSection]:
+    """Every drawing's parts list from `/en/Manual/DrawingsPrint`.
+
+    One request answers what would otherwise be one request per drawing,
+    which is why searching parts across a machine is affordable at all. A
+    section without a parts table is still returned, so a title-only match
+    remains possible.
+    """
+    text = _INLINE_SVG.sub("", body.decode("utf-8", "ignore"))
+    soup = BeautifulSoup(text, "html.parser")
+    sections: list[DrawingSection] = []
+    for heading in soup.find_all("h4"):
+        title = " ".join(heading.get_text(" ").split())
+        if not title:
+            continue
+        table = heading.find_next("table", class_="list")
+        parts: list[DrawingPart] = []
+        if table is not None:
+            for row in table.find_all("tr"):
+                cells = row.find_all("td")
+                if len(cells) < 3:
+                    continue
+                reference = cells[0].get_text(strip=True)
+                if not reference.isdigit():
+                    continue
+                parts.append(
+                    DrawingPart(
+                        reference=reference,
+                        part_number=cells[1].get_text(strip=True),
+                        description=cells[2].get_text(strip=True),
+                        comments=(
+                            (cells[3].get_text(strip=True) or None) if len(cells) > 3 else None
+                        ),
+                    )
+                )
+        sections.append(DrawingSection(title=title, parts=parts))
+    if not sections:
+        logger.warning("alliance drawings print page: no drawing sections found")
+    return sections

@@ -26,7 +26,9 @@ from app.providers.alliance.config import (
 from app.providers.alliance.document_parser import (
     DrawingContent,
     DrawingLink,
+    DrawingSection,
     parse_drawing_page,
+    parse_drawings_print,
     parse_literature_page,
     parse_manual_page,
 )
@@ -244,6 +246,27 @@ class AllianceConnector(ProviderConnector):
             )
         )
         return page.drawings
+
+    async def fetch_drawing_sections(self, reference: str) -> list[DrawingSection]:
+        """Every drawing's parts list for a machine, in ONE request.
+
+        The combined print page carries all of them. Fetching it is how a
+        search can answer "which drawing is the belt in?" without a request
+        per drawing — 34 for this machine. Same strict reference validation
+        and same transport safeguards as everything else here.
+        """
+        match = _DOCUMENT_REF.match(reference or "")
+        if match is None:
+            raise InvalidDocumentReference(
+                "document reference must be '<manual id>:<model id>' (digits only)"
+            )
+        manual_id, model_id = match.groups()
+        transport = self._document_transport()
+        body = await transport.fetch_page(
+            self._resolve_path(f"/en/Manual/DrawingsPrint?ManualId={manual_id}&ModelId={model_id}"),
+            max_bytes=self._settings.alliance_max_print_page_bytes,
+        )
+        return parse_drawings_print(body)
 
     async def fetch_drawing(self, source_path: str) -> DrawingContent:
         """One assembly drawing: its SVG diagram and parts table."""

@@ -322,6 +322,40 @@ class DrawingPart {
   }
 }
 
+/// A drawing a parts search suggests, and the parts that matched.
+///
+/// `matches` is empty when only the drawing's own name matched, which is
+/// still worth showing — someone who knows the drawing's name should not
+/// have to out-guess its parts list.
+class DrawingSearchMatch {
+  const DrawingSearchMatch({
+    required this.token,
+    required this.title,
+    this.drawingId,
+    this.matches = const [],
+  });
+
+  final String token;
+  final String title;
+  final String? drawingId;
+  final List<DrawingPart> matches;
+
+  DrawingSummary get summary =>
+      DrawingSummary(token: token, title: title, drawingId: drawingId);
+
+  factory DrawingSearchMatch.fromJson(Map<String, dynamic> json) =>
+      DrawingSearchMatch(
+        token: json['token'] as String,
+        title: json['title'] as String,
+        drawingId: json['drawing_id'] as String?,
+        matches:
+            (json['matches'] as List<dynamic>?)
+                ?.map((p) => DrawingPart.fromJson(p as Map<String, dynamic>))
+                .toList() ??
+            const [],
+      );
+}
+
 /// One numbered marker on a diagram, in the diagram's own coordinates.
 ///
 /// The backend only sends callouts whose number and position are both

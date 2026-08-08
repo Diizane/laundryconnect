@@ -241,6 +241,7 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
     this.searchHandler,
     this.drawingsHandler,
     this.drawingHandler,
+    this.drawingSearchHandler,
   });
 
   Future<DocumentDiscovery> Function(String providerId, String ref)?
@@ -259,6 +260,13 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
   drawingsHandler;
   Future<DrawingDetail> Function(String providerId, String token)?
   drawingHandler;
+  Future<List<DrawingSearchMatch>> Function(
+    String providerId,
+    String ref,
+    String query,
+  )?
+  drawingSearchHandler;
+  final List<String> drawingSearchCalls = [];
 
   final discoverCalls = <String>[];
   final downloadCalls = <String>[];
@@ -266,6 +274,34 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
   final searchCalls = <String>[];
   final drawingListCalls = <String>[];
   final drawingCalls = <String>[];
+
+  @override
+  Future<List<DrawingSearchMatch>> searchDrawings(
+    String providerId,
+    String ref,
+    String query,
+  ) {
+    drawingSearchCalls.add(query);
+    final handler = drawingSearchHandler;
+    if (handler != null) return handler(providerId, ref, query);
+    return Future.value(
+      query.toLowerCase().contains('belt')
+          ? const [
+              DrawingSearchMatch(
+                token: 'token-drive',
+                title: 'Drive',
+                matches: [
+                  DrawingPart(
+                    reference: '8',
+                    partNumber: 'SP533157',
+                    description: 'Belt',
+                  ),
+                ],
+              ),
+            ]
+          : const <DrawingSearchMatch>[],
+    );
+  }
 
   @override
   Future<DocumentDiscovery> discoverDocuments(String providerId, String ref) {

@@ -80,6 +80,31 @@ class DrawingListResponse(BaseModel):
     drawings: list[DrawingSummaryOut] = Field(default_factory=list)
 
 
+class DrawingSearchMatchOut(BaseModel):
+    """One drawing a search suggests, and why."""
+
+    token: str
+    title: str
+    drawing_id: str | None = None
+    # The parts whose description, number or callout matched. Empty when
+    # only the drawing's own name matched.
+    matches: list["DrawingPartOut"] = Field(default_factory=list)
+
+
+class DrawingSearchResponse(BaseModel):
+    """Where to look for something across a machine's drawings.
+
+    `index_age_seconds` is how old the parts index behind this answer is.
+    The index only decides which drawing to suggest; opening one always
+    fetches it live, so an old index can never show stale contents.
+    """
+
+    provider_id: str
+    query: str
+    index_age_seconds: float
+    results: list[DrawingSearchMatchOut] = Field(default_factory=list)
+
+
 class DrawingPartOut(BaseModel):
     reference: str
     part_number: str

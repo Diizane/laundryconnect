@@ -396,6 +396,58 @@ class TestDrawings:
         response = client.get("/api/v1/providers/nope/drawings", params={"ref": "SC60"})
         assert response.status_code == 404
 
+    def test_search_says_which_drawing_a_part_is_in(
+        self, alliance_client: TestClient, tmp_path
+    ) -> None:
+        """The reason this endpoint exists: "belt" appears in no drawing
+        title, so filtering titles can never find it."""
+        response = alliance_client.get(
+            "/api/v1/providers/alliance/drawings/search",
+            params={"ref": "1001:2002", "q": "belt"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert [r["title"] for r in body["results"]] == ["Drive"]
+        assert body["results"][0]["matches"][0]["part_number"] == "SP533157"
+        # Every suggestion must be openable, and never via a provider path.
+        assert body["results"][0]["token"]
+        raw = json.dumps(body)
+        for marker in PROVIDER_INTERNALS:
+            assert marker not in raw, f"provider internal '{marker}' leaked"
+
+    def test_search_with_no_match_is_an_empty_list_not_an_error(
+        self, alliance_client: TestClient
+    ) -> None:
+        body = alliance_client.get(
+            "/api/v1/providers/alliance/drawings/search",
+            params={"ref": "1001:2002", "q": "thermostat"},
+        ).json()
+        assert body["results"] == []
+
+    def test_search_reports_how_old_its_index_is(self, alliance_client: TestClient) -> None:
+        body = alliance_client.get(
+            "/api/v1/providers/alliance/drawings/search",
+            params={"ref": "1001:2002", "q": "belt"},
+        ).json()
+        assert body["index_age_seconds"] >= 0
+
+    def test_search_requires_something_to_search_for(self, alliance_client: TestClient) -> None:
+        assert (
+            alliance_client.get(
+                "/api/v1/providers/alliance/drawings/search",
+                params={"ref": "1001:2002", "q": ""},
+            ).status_code
+            == 422
+        )
+
+    def test_search_is_not_mistaken_for_a_drawing_token(self, alliance_client: TestClient) -> None:
+        """/drawings/search must not be routed as /drawings/{token}."""
+        response = alliance_client.get(
+            "/api/v1/providers/alliance/drawings/search",
+            params={"ref": "1001:2002", "q": "belt"},
+        )
+        assert response.status_code == 200
+
     def test_malformed_drawing_token_is_404(self, alliance_client: TestClient) -> None:
         assert alliance_client.get("/api/v1/providers/alliance/drawings/garbage").status_code == 404
 

@@ -122,6 +122,14 @@ abstract interface class ProviderDocumentsApi {
 
   /// One drawing's vector diagram and parts list.
   Future<DrawingDetail> fetchDrawing(String providerId, String token);
+
+  /// Which of a machine's drawings to open for a part. Searches every
+  /// drawing's parts list, not just their titles.
+  Future<List<DrawingSearchMatch>> searchDrawings(
+    String providerId,
+    String ref,
+    String query,
+  );
 }
 
 /// Shared request plumbing: timeouts, connectivity errors, status handling,
@@ -409,6 +417,27 @@ class HttpProviderDocumentsApi implements ProviderDocumentsApi {
       return DocumentSearchResults.fromJson(json as Map<String, dynamic>);
     } on TypeError {
       throw const ApiException('Unexpected server response.');
+    }
+  }
+
+  @override
+  @override
+  Future<List<DrawingSearchMatch>> searchDrawings(
+    String providerId,
+    String ref,
+    String query,
+  ) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/providers/$providerId/drawings/search',
+      queryParameters: {'ref': ref, 'q': query},
+    );
+    try {
+      return ((json as Map<String, dynamic>)['results'] as List<dynamic>)
+          .map((d) => DrawingSearchMatch.fromJson(d as Map<String, dynamic>))
+          .toList();
+    } on Object {
+      throw const ApiException('The server sent an unexpected response.');
     }
   }
 

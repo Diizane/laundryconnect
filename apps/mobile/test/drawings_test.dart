@@ -162,15 +162,97 @@ void main() {
       expect(api.drawingListCalls, ['16774:430362']);
     });
 
-    testWidgets('filters by name', (tester) async {
+    testWidgets('searching finds the drawing a part lives in', (tester) async {
+      // The point of the change: "belt" is in no drawing's name, so a name
+      // filter could never find it. The parts lists can.
+      final api = FakeProviderDocumentsApi();
+      await tester.pumpWidget(_list(api));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('drawings-filter')), 'belt');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(api.drawingSearchCalls, ['belt']);
+      expect(find.text('Drive'), findsOneWidget);
+      expect(find.text('Frame'), findsNothing);
+      // Why it was suggested, with the number that gets ordered.
+      expect(find.textContaining('SP533157'), findsOneWidget);
+    });
+
+    testWidgets('typing does not fire a search per keystroke', (tester) async {
+      final api = FakeProviderDocumentsApi();
+      await tester.pumpWidget(_list(api));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const Key('drawings-filter'));
+      await tester.enterText(field, 'b');
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(field, 'be');
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(field, 'belt');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(api.drawingSearchCalls, ['belt']);
+    });
+
+    testWidgets('clearing the box brings every drawing back', (tester) async {
       await tester.pumpWidget(_list(FakeProviderDocumentsApi()));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byKey(const Key('drawings-filter')), 'driv');
+      await tester.enterText(find.byKey(const Key('drawings-filter')), 'belt');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text('Frame'), findsNothing);
+
+      await tester.enterText(find.byKey(const Key('drawings-filter')), '');
+      await tester.pumpAndSettle();
+      expect(find.text('Frame'), findsOneWidget);
+      expect(find.text('Drive'), findsOneWidget);
+    });
+
+    testWidgets('a search with no match says so', (tester) async {
+      await tester.pumpWidget(_list(FakeProviderDocumentsApi()));
       await tester.pumpAndSettle();
 
+      await tester.enterText(
+        find.byKey(const Key('drawings-filter')),
+        'thermostat',
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Nothing matching'), findsOneWidget);
+    });
+
+    testWidgets('a failed search offers another go', (tester) async {
+      var calls = 0;
+      final api = FakeProviderDocumentsApi(
+        drawingSearchHandler: (_, _, _) async {
+          calls += 1;
+          if (calls == 1) {
+            throw const ApiException(
+              'That is not available right now. Try again shortly.',
+              kind: ApiErrorKind.unavailable,
+            );
+          }
+          return const [
+            DrawingSearchMatch(token: 'token-drive', title: 'Drive'),
+          ];
+        },
+      );
+      await tester.pumpWidget(_list(api));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('drawings-filter')), 'belt');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('not available right now'), findsOneWidget);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
       expect(find.text('Drive'), findsOneWidget);
-      expect(find.text('Frame'), findsNothing);
     });
 
     testWidgets('empty list says so', (tester) async {
