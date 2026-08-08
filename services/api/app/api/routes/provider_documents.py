@@ -40,6 +40,10 @@ from app.schemas.provider_documents import (
     DocumentDiscoveryResponse,
     DocumentSearchHitOut,
     DocumentSearchResultsResponse,
+    DrawingListResponse,
+    DrawingPartOut,
+    DrawingResponse,
+    DrawingSummaryOut,
     ProviderDocumentOut,
 )
 
@@ -295,4 +299,79 @@ async def search_within_document(
         searchable=index.is_searchable,
         total_hits=len(hits),
         hits=[DocumentSearchHitOut(page_number=h.page_number, snippet=h.snippet) for h in hits],
+    )
+
+
+drawings_router = APIRouter(prefix="/providers/{provider_id}/drawings", tags=["provider-drawings"])
+
+
+@drawings_router.get("", response_model=DrawingListResponse)
+async def list_drawings(
+    registry: RegistryDep,
+    settings: SettingsDep,
+    provider_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"),
+    ref: str = Query(pattern=_REF_PATTERN, description="The search result's document reference"),
+) -> DrawingListResponse:
+    """Assembly drawings available for one machine.
+
+    Each carries an opaque token; provider paths never reach the client.
+    """
+    connector = _connector_or_404(registry, provider_id)
+    if not hasattr(connector, "discover_drawings"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="This provider does not support drawings.",
+        )
+    try:
+        drawings = await connector.discover_drawings(ref)
+    except ProviderError as exc:
+        _raise_for_provider_error(exc, provider_id)
+    try:
+        return DrawingListResponse(
+            provider_id=provider_id,
+            drawings=[
+                DrawingSummaryOut(
+                    token=mint_document_token(settings, provider_id, d.source_path),
+                    title=d.title,
+                    drawing_id=d.drawing_id,
+                )
+                for d in drawings
+            ],
+        )
+    except MissingTokenSecret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document tokens are not configured for this environment.",
+        ) from None
+
+
+@drawings_router.get("/{token}", response_model=DrawingResponse)
+async def get_drawing(
+    registry: RegistryDep,
+    settings: SettingsDep,
+    provider_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"),
+    token: str = Path(pattern=_TOKEN_PATTERN),
+) -> DrawingResponse:
+    """One drawing's vector diagram and parts list."""
+    connector = _connector_or_404(registry, provider_id)
+    if not hasattr(connector, "fetch_drawing"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="This provider does not support drawings."
+        )
+    source_path = _resolve_or_404(settings, token, provider_id)
+    try:
+        drawing = await connector.fetch_drawing(source_path)
+    except ProviderError as exc:
+        _raise_for_provider_error(exc, provider_id)
+    return DrawingResponse(
+        svg=drawing.svg,
+        parts=[
+            DrawingPartOut(
+                reference=p.reference,
+                part_number=p.part_number,
+                description=p.description,
+                comments=p.comments,
+            )
+            for p in drawing.parts
+        ],
     )
