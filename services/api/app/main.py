@@ -15,6 +15,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.database.session import create_engine, create_session_factory
+from app.providers.alliance.keepalive import SessionKeepalive
 from app.providers.registry import build_registry
 from app.schemas.health import ApiMetadata
 
@@ -23,9 +24,30 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    keepalive = getattr(app.state, "alliance_keepalive", None)
+    if keepalive is not None:
+        keepalive.start()
     yield
+    if keepalive is not None:
+        await keepalive.stop()
     if app.state.db_engine is not None:
         await app.state.db_engine.dispose()
+
+
+def _build_keepalive(settings) -> SessionKeepalive | None:
+    """Wire the keepalive to the real connector's page fetch, lazily so
+    fixture/CI paths never construct a live transport."""
+    if not settings.alliance_keepalive_enabled:
+        return None
+
+    async def fetch_page(url: str) -> bytes:
+        from app.providers.alliance.connector import AllianceConnector
+
+        connector = AllianceConnector(settings=settings)
+        transport = connector._document_transport()  # noqa: SLF001 - same live gate
+        return await transport.fetch_page(url)
+
+    return SessionKeepalive(settings, fetch_page=fetch_page)
 
 
 def create_app() -> FastAPI:
@@ -44,6 +66,7 @@ def create_app() -> FastAPI:
     )
 
     app.state.provider_registry = build_registry(settings)
+    app.state.alliance_keepalive = _build_keepalive(settings)
 
     # The app must start without a database until Milestone 4 environments
     # are established; readiness reporting reflects whichever is the case.

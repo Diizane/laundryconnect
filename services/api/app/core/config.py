@@ -99,6 +99,17 @@ class Settings(BaseSettings):
     alliance_serial_search_url: str = (
         "https://pc.alliancels.net/en/Search/BySerial?searchString={query}&x.Show=Assembly"
     )
+    # Session keepalive (Milestone 11): periodically exercise an already
+    # authorised session so it does not expire through inactivity, and
+    # measure how long sessions actually live. Never logs in and never
+    # touches credentials. OFF by default — explicit per-environment
+    # opt-in, like every other live behaviour.
+    alliance_keepalive_enabled: bool = False
+    # Conservative: 96 requests/day at the default, far under the rate limit.
+    alliance_keepalive_interval_seconds: int = 900  # 15 minutes
+    # ONE fixed already-authorised page. Not a crawl target.
+    alliance_keepalive_url: str = "https://pc.alliancels.net/"
+
     alliance_rate_limit_per_minute: float = 12.0
     alliance_request_timeout_seconds: float = 20.0
     alliance_max_retries: int = 2
