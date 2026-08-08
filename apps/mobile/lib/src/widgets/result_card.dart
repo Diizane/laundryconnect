@@ -12,11 +12,13 @@ class ResultCard extends StatelessWidget {
     required this.result,
     this.onTap,
     this.onDocuments,
+    this.onDrawings,
   });
 
   final SearchResult result;
   final VoidCallback? onTap;
   final VoidCallback? onDocuments;
+  final VoidCallback? onDrawings;
 
   IconData get _icon => switch (result.resultType) {
     'document' => Icons.menu_book_outlined,
@@ -75,6 +77,13 @@ class ResultCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onDrawings != null)
+                IconButton(
+                  tooltip: 'Assembly drawings',
+                  icon: const Icon(Icons.schema_outlined),
+                  color: theme.colorScheme.primary,
+                  onPressed: onDrawings,
+                ),
               if (onDocuments != null)
                 IconButton(
                   tooltip: 'Documents',
