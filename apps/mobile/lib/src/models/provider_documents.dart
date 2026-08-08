@@ -139,3 +139,94 @@ class DocumentGroup {
     return 5;
   }
 }
+
+/// One heading from a document's embedded table of contents.
+class ContentsEntry {
+  const ContentsEntry({
+    required this.title,
+    required this.pageNumber,
+    this.depth = 0,
+  });
+
+  final String title;
+  final int pageNumber;
+  final int depth;
+
+  factory ContentsEntry.fromJson(Map<String, dynamic> json) => ContentsEntry(
+    title: json['title'] as String,
+    pageNumber: json['page_number'] as int,
+    depth: json['depth'] as int? ?? 0,
+  );
+}
+
+/// What a document offers for navigation and search.
+class DocumentContents {
+  const DocumentContents({
+    required this.pageCount,
+    required this.searchable,
+    required this.searchablePages,
+    this.contents = const [],
+  });
+
+  final int pageCount;
+
+  /// False when the PDF carries no usable text layer. Some real manuals
+  /// embed fonts without character maps, so a search over them can only
+  /// ever return nothing — the UI says so rather than looking broken.
+  final bool searchable;
+  final int searchablePages;
+  final List<ContentsEntry> contents;
+
+  bool get hasContents => contents.isNotEmpty;
+
+  factory DocumentContents.fromJson(Map<String, dynamic> json) =>
+      DocumentContents(
+        pageCount: json['page_count'] as int,
+        searchable: json['searchable'] as bool,
+        searchablePages: json['searchable_pages'] as int? ?? 0,
+        contents:
+            (json['contents'] as List<dynamic>?)
+                ?.map((e) => ContentsEntry.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+      );
+}
+
+/// One page-cited match from searching inside a document.
+class DocumentSearchHit {
+  const DocumentSearchHit({required this.pageNumber, required this.snippet});
+
+  final int pageNumber;
+  final String snippet;
+
+  factory DocumentSearchHit.fromJson(Map<String, dynamic> json) =>
+      DocumentSearchHit(
+        pageNumber: json['page_number'] as int,
+        snippet: json['snippet'] as String,
+      );
+}
+
+class DocumentSearchResults {
+  const DocumentSearchResults({
+    required this.query,
+    required this.searchable,
+    required this.hits,
+  });
+
+  final String query;
+  final bool searchable;
+  final List<DocumentSearchHit> hits;
+
+  factory DocumentSearchResults.fromJson(Map<String, dynamic> json) =>
+      DocumentSearchResults(
+        query: json['query'] as String,
+        searchable: json['searchable'] as bool,
+        hits:
+            (json['hits'] as List<dynamic>?)
+                ?.map(
+                  (e) => DocumentSearchHit.fromJson(e as Map<String, dynamic>),
+                )
+                .toList() ??
+            const [],
+      );
+}
