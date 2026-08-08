@@ -135,6 +135,15 @@ class Settings(BaseSettings):
     # Download caps (safeguard: bounded memory / no unbounded transfers).
     alliance_max_response_bytes: int = 5 * 1024 * 1024  # search HTML/JSON: 5 MB
     alliance_max_document_bytes: int = 100 * 1024 * 1024  # PDF: 100 MB
+    # The combined drawings print page inlines every diagram: 41 MB for the
+    # IA135. It is fetched only to build the parts index, and only once per
+    # machine per TTL.
+    alliance_max_print_page_bytes: int = 96 * 1024 * 1024
+    # How long a machine's drawing parts index stays usable. Parts lists
+    # change far more slowly than manuals are revised, and a stale entry
+    # only ever affects which drawing a search suggests — the drawing
+    # itself is always fetched live.
+    drawing_index_ttl_seconds: int = 7 * 24 * 3600
     alliance_download_timeout_seconds: float = 60.0
 
     @property

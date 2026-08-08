@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.documents.cache import DocumentCache
+from app.documents.drawing_index import DrawingIndexStore
 from app.documents.fetcher import CachingDocumentFetcher
 from app.providers.registry import ProviderRegistry
 from app.search.service import SearchService
@@ -82,3 +83,23 @@ def get_document_fetcher(settings: SettingsDep) -> CachingDocumentFetcher:
 
 
 DocumentFetcherDep = Annotated[CachingDocumentFetcher, Depends(get_document_fetcher)]
+
+
+@lru_cache
+def _drawing_index_store(root: str, ttl_seconds: int) -> DrawingIndexStore:
+    return DrawingIndexStore(root, ttl_seconds=ttl_seconds)
+
+
+def get_drawing_index_store(settings: SettingsDep) -> DrawingIndexStore:
+    """The parts index used to answer "which drawing is this part in?".
+
+    Stored beside the document cache. Both are derived data the server can
+    rebuild, so they share a lifetime and a volume.
+    """
+    return _drawing_index_store(
+        str(Path(settings.document_cache_path).parent / "drawing-index"),
+        settings.drawing_index_ttl_seconds,
+    )
+
+
+DrawingIndexStoreDep = Annotated[DrawingIndexStore, Depends(get_drawing_index_store)]

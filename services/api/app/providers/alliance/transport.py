@@ -50,7 +50,7 @@ class AllianceTransport(Protocol):
 
     # Document workflow (Milestone 9): one bounded intermediate page fetch,
     # one validated document fetch. Implementations never crawl.
-    async def fetch_page(self, url: str) -> bytes: ...
+    async def fetch_page(self, url: str, *, max_bytes: int | None = None) -> bytes: ...
 
     async def fetch_document(
         self, url: str, *, conditional: dict[str, str] | None = None
@@ -69,10 +69,12 @@ class FixtureTransport:
         self._fixtures_dir = fixtures_dir
         self._records = json.loads((fixtures_dir / "search.json").read_text())["records"]
 
-    async def fetch_page(self, url: str) -> bytes:
+    async def fetch_page(self, url: str, *, max_bytes: int | None = None) -> bytes:
         path = urlparse(url).path
         if path.startswith("/en/Model/Literature"):
             return (self._fixtures_dir / "literature_page.html").read_bytes()
+        if path.startswith("/en/Manual/DrawingsPrint"):
+            return (self._fixtures_dir / "drawings_print_page.html").read_bytes()
         if path.startswith("/en/Manual"):
             return (self._fixtures_dir / "manual_page.html").read_bytes()
         raise DocumentNotFound("no fixture page for this path")
@@ -465,13 +467,18 @@ class SessionTransport:
         Applies every safeguard; never parses."""
         return await self._fetch(self._search_url(query), self._max_response_bytes)
 
-    async def fetch_page(self, url: str) -> bytes:
+    async def fetch_page(self, url: str, *, max_bytes: int | None = None) -> bytes:
         """Fetch ONE intermediate HTML page of the bounded document workflow
         (`/en/Manual` menu or `/en/Model/Literature` list), under the search
         size cap. Every transport safeguard applies; 404 maps to
         `DocumentNotFound`. Callers never follow links beyond the observed
-        two-page traversal (Milestone 9 Phase 1 findings)."""
-        return await self._fetch(url, self._max_response_bytes, map_404=True)
+        two-page traversal (Milestone 9 Phase 1 findings).
+
+        `max_bytes` raises the cap for a caller that knows the page is
+        large — the combined drawings print page is tens of megabytes
+        because every diagram is inline. It can only ever be used to allow
+        a bigger page, never to lift the transport's other safeguards."""
+        return await self._fetch(url, max(self._max_response_bytes, max_bytes or 0), map_404=True)
 
     async def fetch_document(self, url: str, *, conditional: dict[str, str] | None = None) -> bytes:
         """Download a single validated PDF, streamed under the 100 MB cap.

@@ -13,10 +13,17 @@ documents (404); raw exception text and upstream URLs are never returned.
 
 import logging
 import re
+import time
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 
-from app.api.deps import DocumentFetcherDep, RegistryDep, SettingsDep
+from app.api.deps import (
+    DocumentFetcherDep,
+    DrawingIndexStoreDep,
+    RegistryDep,
+    SettingsDep,
+)
+from app.documents.drawing_index import DrawingIndex, IndexedDrawing, IndexedPart
 from app.providers.base import ProviderConnector
 from app.providers.document_token import (
     InvalidDocumentToken,
@@ -44,6 +51,8 @@ from app.schemas.provider_documents import (
     DrawingListResponse,
     DrawingPartOut,
     DrawingResponse,
+    DrawingSearchMatchOut,
+    DrawingSearchResponse,
     DrawingSummaryOut,
     ProviderDocumentOut,
 )
@@ -344,6 +353,103 @@ async def list_drawings(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document tokens are not configured for this environment.",
         ) from None
+
+
+@drawings_router.get("/search", response_model=DrawingSearchResponse)
+async def search_drawings(
+    registry: RegistryDep,
+    settings: SettingsDep,
+    index_store: DrawingIndexStoreDep,
+    provider_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"),
+    ref: str = Query(pattern=_REF_PATTERN, description="The search result's document reference"),
+    q: str = Query(min_length=1, max_length=64, description="What to look for"),
+) -> DrawingSearchResponse:
+    """Which of a machine's drawings to open for a given part.
+
+    Searching titles alone cannot answer "where is the drive belt?" — no
+    title contains the word. This searches every drawing's parts list,
+    using an index built once per machine from the provider's combined
+    print page (one request rather than one per drawing).
+
+    The index decides only which drawing to suggest. Opening one always
+    fetches it live, so an old index cannot show stale contents.
+    """
+    connector = _connector_or_404(registry, provider_id)
+    if not hasattr(connector, "fetch_drawing_sections"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="This provider does not support drawings.",
+        )
+
+    index = index_store.get(provider_id, ref)
+    if index is None:
+        try:
+            sections = await connector.fetch_drawing_sections(ref)
+        except ProviderError as exc:
+            _raise_for_provider_error(exc, provider_id)
+        index = DrawingIndex(
+            built_at=time.time(),
+            drawings=tuple(
+                IndexedDrawing(
+                    title=section.title,
+                    parts=tuple(
+                        IndexedPart(
+                            reference=part.reference,
+                            part_number=part.part_number,
+                            description=part.description,
+                        )
+                        for part in section.parts
+                    ),
+                )
+                for section in sections
+            ),
+        )
+        index_store.put(provider_id, ref, index)
+        logger.info(
+            "drawing index built",
+            extra={"provider": provider_id, "drawings": len(index.drawings)},
+        )
+
+    # A suggestion is only useful if it can be opened, so it has to be
+    # matched back to a listed drawing to get a token.
+    try:
+        listed = {d.title: d for d in await connector.discover_drawings(ref)}
+    except ProviderError as exc:
+        _raise_for_provider_error(exc, provider_id)
+
+    results: list[DrawingSearchMatchOut] = []
+    try:
+        for drawing, matched in index.search(q):
+            link = listed.get(drawing.title)
+            if link is None:
+                continue  # indexed but not listed: nothing to open
+            results.append(
+                DrawingSearchMatchOut(
+                    token=mint_document_token(settings, provider_id, link.source_path),
+                    title=drawing.title,
+                    drawing_id=link.drawing_id,
+                    matches=[
+                        DrawingPartOut(
+                            reference=part.reference,
+                            part_number=part.part_number,
+                            description=part.description,
+                        )
+                        for part in matched
+                    ],
+                )
+            )
+    except MissingTokenSecret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document tokens are not configured for this environment.",
+        ) from None
+
+    return DrawingSearchResponse(
+        provider_id=provider_id,
+        query=q,
+        index_age_seconds=round(index.age_seconds(time.time()), 1),
+        results=results,
+    )
 
 
 @drawings_router.get("/{token}", response_model=DrawingResponse)
