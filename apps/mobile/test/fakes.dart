@@ -61,18 +61,29 @@ class FakeSearchApi implements SearchApi {
 }
 
 class FakeMachinesApi implements MachinesApi {
-  FakeMachinesApi({this.machines = const [sc60], this.documentsHandler});
+  FakeMachinesApi({
+    this.machines = const [sc60],
+    this.documentsHandler,
+    this.findError,
+  });
 
   final List<MachineSummary> machines;
   final Future<MachineDocuments> Function(String machineId)? documentsHandler;
 
+  /// Raised by [findByModelNumber] — the deployed backend runs without the
+  /// internal catalog, so this endpoint answers 503 there.
+  final ApiException? findError;
+
+  final List<String> findCalls = [];
+
   @override
-  Future<List<MachineSummary>> findByModelNumber(String modelNumber) async =>
-      machines
-          .where(
-            (m) => m.modelNumber.toLowerCase() == modelNumber.toLowerCase(),
-          )
-          .toList();
+  Future<List<MachineSummary>> findByModelNumber(String modelNumber) async {
+    findCalls.add(modelNumber);
+    if (findError != null) throw findError!;
+    return machines
+        .where((m) => m.modelNumber.toLowerCase() == modelNumber.toLowerCase())
+        .toList();
+  }
 
   @override
   Future<MachineDocuments> machineDocuments(String machineId) {

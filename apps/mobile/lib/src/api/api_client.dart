@@ -57,6 +57,11 @@ enum ApiErrorKind {
   /// Connectivity/timeout.
   network,
 
+  /// The server is up but this part of it is not available (503) — an
+  /// optional component is not deployed, or is temporarily down. Nothing
+  /// the person holding the phone can act on.
+  unavailable,
+
   /// Anything else server-side.
   server,
 }
@@ -207,16 +212,18 @@ class _BackendClient {
       case 503:
         final isReauth =
             detail != null && detail.toLowerCase().contains('reauthentication');
+        // Other 503 details ("Database is not configured.", "Provider live
+        // access is not enabled in this environment.") describe how the
+        // server is set up. They are for whoever runs it, not for someone
+        // standing in front of a machine, so they are not repeated here.
         throw ApiException(
           isReauth
               ? 'The Alliance session needs to be signed in again by an '
                     'operator. Try again once that is done.'
-              : (detail ??
-                    'The server is not fully available right now. '
-                        'Try again shortly.'),
+              : 'That is not available right now. Try again shortly.',
           kind: isReauth
               ? ApiErrorKind.reauthenticationRequired
-              : ApiErrorKind.server,
+              : ApiErrorKind.unavailable,
         );
       default:
         throw ApiException(

@@ -84,24 +84,43 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
     }
   }
 
-  /// Open the machine workspace for a search result's model, if the
-  /// catalog knows it.
-  Future<void> _openWorkspaceForResult(SearchResult result) async {
+  /// Open a search result.
+  ///
+  /// A provider result goes straight to its documents — that is the whole
+  /// point of the search. Only a result with no provider documents falls
+  /// back to the internal catalog workspace, which is seeded sample data
+  /// and is not deployed everywhere.
+  Future<void> _openResult(SearchResult result) async {
+    if (result.documentRef != null) {
+      await _openDocumentsForResult(result);
+      return;
+    }
     final model = result.model;
-    if (model == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    if (model == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No documents listed for this result.')),
+      );
+      return;
+    }
     try {
       final machines = await widget.machinesApi.findByModelNumber(model);
       if (!mounted) return;
       if (machines.isEmpty) {
         messenger.showSnackBar(
-          SnackBar(content: Text('No workspace available for $model yet.')),
+          SnackBar(content: Text('No documents listed for $model yet.')),
         );
         return;
       }
       await _openWorkspace(machines.first);
     } on ApiException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      // The catalog is optional; its absence is not something a technician
+      // in the field can act on, so it is reported as missing content
+      // rather than as a database fault.
+      final message = error.kind == ApiErrorKind.unavailable
+          ? 'No documents listed for $model yet.'
+          : error.message;
+      messenger.showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -184,7 +203,7 @@ class _HomeSearchScreenState extends State<HomeSearchScreen> {
       _Failed(:final message) => _ErrorView(message: message, onRetry: _search),
       _Loaded(:final response) => _ResultsView(
         response: response,
-        onResultTap: _openWorkspaceForResult,
+        onResultTap: _openResult,
         onDocumentsTap: _openDocumentsForResult,
         onDrawingsTap: _openDrawingsForResult,
       ),

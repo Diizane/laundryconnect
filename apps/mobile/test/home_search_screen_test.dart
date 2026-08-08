@@ -53,10 +53,12 @@ Widget _app(
   SearchApi searchApi, {
   FakeMachinesApi? machinesApi,
   FakeWorkspaceStore? store,
+  FakeProviderDocumentsApi? providerDocumentsApi,
 }) => LaundryConnectApp(
   searchApi: searchApi,
   machinesApi: machinesApi ?? FakeMachinesApi(),
   documentsApi: FakeDocumentsApi(),
+  providerDocumentsApi: providerDocumentsApi ?? FakeProviderDocumentsApi(),
   store: store ?? FakeWorkspaceStore(),
 );
 
@@ -132,45 +134,192 @@ void main() {
     expect(api.queries, ['SC60']);
     expect(find.text('SC60'), findsWidgets); // group header
     expect(find.text('SC60 Service Manual (sample)'), findsOneWidget);
-    expect(find.text('MOCK'), findsOneWidget); // origin badge, never hidden
-    expect(find.text('mock'), findsOneWidget); // provider badge
+    // Data that is not live stays labelled; the provider chip does not.
+    expect(find.text('MOCK'), findsOneWidget);
+    expect(find.text('mock'), findsNothing);
   });
 
-  testWidgets('tapping a search result opens the machine workspace', (
-    tester,
-  ) async {
-    final store = FakeWorkspaceStore();
+  testWidgets('tapping a result opens its provider documents', (tester) async {
     await _pumpAppAndSearch(
       tester,
-      _app(FakeSearchApi((_) async => _response()), store: store),
+      _app(FakeSearchApi((_) async => _response())),
     );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('SC60 Service Manual (sample)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Manuals'), findsOneWidget);
-    expect(find.text('Wiring'), findsOneWidget);
-    expect(store.recents.map((m) => m.id), ['machine-1']);
+    // The documents screen groups by type; the group header is what shows.
+    expect(find.text('Technical Mnl'), findsOneWidget);
   });
 
-  testWidgets('unknown model shows a snackbar instead of a workspace', (
-    tester,
-  ) async {
-    await _pumpAppAndSearch(
-      tester,
-      _app(
-        FakeSearchApi((_) async => _response()),
-        machinesApi: FakeMachinesApi(machines: const []),
+  testWidgets('a result with no documents anywhere says so', (tester) async {
+    // No provider reference and no catalog row: there is nothing to open,
+    // and saying that beats a screen with nothing on it.
+    final api = FakeSearchApi(
+      (_) async => SearchResponse(
+        query: 'SC60',
+        detectedQueryType: 'model',
+        totalResults: 1,
+        groups: [
+          MachineGroup(
+            model: 'SC60',
+            results: const [
+              SearchResult(
+                providerId: 'other',
+                sourceReference: 'ref-9',
+                resultType: 'document',
+                dataOrigin: 'mock',
+                title: 'Orphan result',
+                model: 'SC60',
+              ),
+            ],
+          ),
+        ],
+        providers: const [
+          ProviderOutcome(
+            providerId: 'other',
+            status: 'success',
+            resultCount: 1,
+          ),
+        ],
       ),
     );
+    await _pumpAppAndSearch(
+      tester,
+      _app(api, machinesApi: FakeMachinesApi(machines: const [])),
+    );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('SC60 Service Manual (sample)'));
+    await tester.tap(find.text('Orphan result'));
     await tester.pumpAndSettle();
 
-    expect(find.text('No workspace available for SC60 yet.'), findsOneWidget);
-    expect(find.text('Manuals'), findsNothing);
+    expect(find.text('No documents listed for SC60 yet.'), findsOneWidget);
+  });
+
+  group('opening a machine from a serial search', () {
+    /// What a serial search actually returns: a machine with a provider
+    /// document reference, and no row in the internal catalog.
+    SearchResult machine() => const SearchResult(
+      providerId: 'alliance',
+      sourceReference: 'als-model-430362',
+      resultType: 'model',
+      dataOrigin: 'live',
+      title: 'IAY135J',
+      model: 'IAY135J',
+      documentType: 'assembly_drawings',
+      metadata: {
+        'manual_id': '16774',
+        'model_id': '430362',
+        'generation_match': 'exact',
+      },
+    );
+
+    SearchResponse response() => SearchResponse(
+      query: '135RX009281WK',
+      detectedQueryType: 'serial',
+      totalResults: 1,
+      groups: [
+        MachineGroup(model: 'IAY135J', results: [machine()]),
+      ],
+      providers: const [
+        ProviderOutcome(
+          providerId: 'alliance',
+          status: 'success',
+          resultCount: 1,
+        ),
+      ],
+    );
+
+    testWidgets('goes straight to the documents, not the catalog', (
+      tester,
+    ) async {
+      // Tapping used to look the machine up in the internal catalog, which
+      // the deployed backend does not run — the technician got "Database is
+      // not configured." instead of their manuals.
+      final machinesApi = FakeMachinesApi();
+      await _pumpAppAndSearch(
+        tester,
+        _app(FakeSearchApi((_) async => response()), machinesApi: machinesApi),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('IAY135J').last);
+      await tester.pumpAndSettle();
+
+      expect(machinesApi.findCalls, isEmpty);
+      // The documents screen groups by type; the group header is what shows.
+      expect(find.text('Technical Mnl'), findsOneWidget);
+    });
+
+    testWidgets('a missing catalog is never reported as a database fault', (
+      tester,
+    ) async {
+      final api = FakeSearchApi(
+        (_) async => SearchResponse(
+          query: 'SC60',
+          detectedQueryType: 'model',
+          totalResults: 1,
+          groups: [
+            MachineGroup(
+              model: 'SC60',
+              results: const [
+                SearchResult(
+                  providerId: 'other',
+                  sourceReference: 'ref-9',
+                  resultType: 'document',
+                  dataOrigin: 'mock',
+                  title: 'Orphan result',
+                  model: 'SC60',
+                ),
+              ],
+            ),
+          ],
+          providers: const [
+            ProviderOutcome(
+              providerId: 'other',
+              status: 'success',
+              resultCount: 1,
+            ),
+          ],
+        ),
+      );
+      await _pumpAppAndSearch(
+        tester,
+        _app(
+          api,
+          machinesApi: FakeMachinesApi(
+            findError: const ApiException(
+              'Database is not configured.',
+              kind: ApiErrorKind.unavailable,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Orphan result'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Database'), findsNothing);
+      expect(find.text('No documents listed for SC60 yet.'), findsOneWidget);
+    });
+
+    testWidgets('a machine card shows the serial match and nothing else', (
+      tester,
+    ) async {
+      await _pumpAppAndSearch(
+        tester,
+        _app(FakeSearchApi((_) async => response())),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('matches this serial'), findsOneWidget);
+      // Chips that told a technician standing at the machine nothing.
+      expect(find.text('LIVE'), findsNothing);
+      expect(find.text('alliance'), findsNothing);
+      expect(find.text('assembly drawings'), findsNothing);
+    });
   });
 
   testWidgets('shows empty state for zero results', (tester) async {

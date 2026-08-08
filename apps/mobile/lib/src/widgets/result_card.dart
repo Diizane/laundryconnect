@@ -29,6 +29,31 @@ class ResultCard extends StatelessWidget {
     _ => Icons.description_outlined,
   };
 
+  /// Whether this result is a machine rather than a document or part.
+  bool get _isMachine => result.resultType == 'model';
+
+  /// The badges worth the space they take.
+  ///
+  /// A machine card carries almost none: the provider, "live" and the
+  /// document type said nothing a technician standing at the machine
+  /// needed, and they crowded out the one badge that matters. Document and
+  /// part results keep their identifying metadata, which is often the only
+  /// place a part number appears.
+  ///
+  /// Data origin is the exception to the tidying: anything not live —
+  /// cached, mock, fixture — stays labelled on every result, because data
+  /// that is not current must never pass for data that is.
+  List<Widget> get badges => [
+    if (result.isGenerationMatch) const MatchBadge('matches this serial'),
+    if (result.dataOrigin != 'live') DataOriginBadge(result.dataOrigin),
+    if (!_isMachine) ...[
+      if (result.documentType != null)
+        InfoBadge(result.documentType!.replaceAll('_', ' ')),
+      if (result.partNumber != null) InfoBadge(result.partNumber!),
+      if (result.revision != null) InfoBadge(result.revision!),
+    ],
+  ];
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -57,23 +82,10 @@ class ResultCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        if (result.isGenerationMatch)
-                          const MatchBadge('matches this serial'),
-                        DataOriginBadge(result.dataOrigin),
-                        InfoBadge(result.providerId),
-                        if (result.documentType != null)
-                          InfoBadge(result.documentType!.replaceAll('_', ' ')),
-                        if (result.partNumber != null)
-                          InfoBadge(result.partNumber!),
-                        if (result.revision != null)
-                          InfoBadge(result.revision!),
-                      ],
-                    ),
+                    if (badges.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 6, runSpacing: 4, children: badges),
+                    ],
                   ],
                 ),
               ),
