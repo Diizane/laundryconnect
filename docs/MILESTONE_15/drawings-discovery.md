@@ -36,7 +36,14 @@ Each callout is a group containing:
 2. two `<path>`s forming the marker circle,
 3. **one or more `<path>`s drawing the digits themselves**.
 
-## The blocker: callout numbers are curves, not text
+## ~~The blocker: callout numbers are curves, not text~~ — corrected
+
+> **Correction, same day.** The conclusion below was wrong, and it was
+> wrong in the expensive direction: it deferred a feature that is in fact
+> safe to build. The *rendered digits* are outlines, which is what the
+> first pass looked at. But each callout sits in a group that **states its
+> own number**, which the first pass missed by reading the glyph paths
+> instead of the enclosing markup. See "Callouts are labelled" below.
 
 The SVG contains **zero `<text>` elements**. Callout numbers are CAD text
 converted to outlines — e.g. the digit "1" is
@@ -45,23 +52,59 @@ converted to outlines — e.g. the digit "1" is
 So:
 
 - ✅ callout **positions** are extractable (leader-line endpoints)
-- ❌ callout **numbers** are not readable from the markup
+- ❌ ~~callout **numbers** are not readable from the markup~~ — they are;
+  see below
 - ✅ the parts table is fully extractable (19 rows, refs `1`–`19`, with part
   numbers and descriptions)
 
-Mapping a tap to a part therefore needs one of:
+The original reasoning was that a mapping would need either an unverified
+order assumption or fragile glyph recognition, and that neither is safe to
+ship untested — a wrong mapping means a technician orders the wrong part.
+That safety bar still stands; it is simply met by the markup itself.
 
-- **Order assumption** — that callout groups are emitted in ref order.
-  Plausible but *unverified*; a first attempt at counting top-level callout
-  groups was inconclusive and needs a proper SVG parse.
-- **Glyph recognition** — matching path outlines back to digits. Feasible
-  (the digit paths look reusable across drawings) but fragile.
+## Callouts are labelled
 
-**Neither is safe to ship untested.** A wrong mapping means a technician
-orders the wrong part — a real cost, in the same category as the wrong
-manual generation and the stale document. Consistent with those decisions,
-any mapping must be validated against several real drawings before it is
-trusted, and should degrade to "unknown" rather than guess.
+Observed 2026-08-08 across all 34 IA135 drawings. Each callout is a group
+whose id carries the reference number, alongside an `onclick` handler that
+repeats it:
+
+```html
+<g id="callout_5" onclick="click('5')" onmouseover="over('5')">
+  <circle id="circle_5" cx="307.98" cy="437.961" r="9.407"/>
+  <path id="number_5" d="…"/>          <!-- the glyph outline -->
+</g>
+```
+
+The marker's position is stated too: a `<circle cx cy r>` in one export
+pipeline, and a path whose on-curve anchors give the same bounding box in
+the other.
+
+Consequences for Phase 2:
+
+- No glyph recognition and no order assumption are needed.
+- Ids are sometimes mangled by the export tool (`callout_10_1_`,
+  `callout_1-2`), so the reference is the leading digits; where `id` and
+  `onclick` both state a number they must agree, and a callout is dropped
+  if they do not.
+- Callouts are a **subset** of the parts table — one drawing lists 5 parts
+  but marks only 2 — so some rows have no tap target, and that is normal
+  rather than a parsing failure.
+- Some drawings have no callouts at all (Serial Label), and one entry
+  listed among the drawings is not a drawing (Parts Manual On Demand, a
+  bulk export larger than the page cap).
+
+## Two export pipelines, one diagram
+
+Also observed across the same 34 drawings: the page always contains
+exactly one diagram plus seven small zoom-control icons, but the diagram's
+`width` is `7.74in`, `13.63cm`, `502.941px` **or absent**, and its group
+ids are either the CAD set (`parts`, `callouts`, `misc_parts`) or a bare
+`Layer_1`. Selecting the diagram by a width in inches — the original
+implementation — found it on only 14 of 34.
+
+Geometry separates the two populations cleanly: diagrams hold 22–6,526
+drawing elements, icons never more than 2. That is the rule now used, with
+ambiguity (two candidates) yielding no diagram rather than a guess.
 
 ## Recommended scope
 
