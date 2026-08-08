@@ -23,6 +23,18 @@ jobs:
           uv venv --python 3.12
           uv pip install -e ".[dev]"
 
+      # The Docker image installs from requirements.txt while development
+      # and CI use pyproject.toml. A dependency added to one but not the
+      # other builds fine and then crashes on deploy (this happened with
+      # `cryptography`), so drift is a CI failure.
+      - name: requirements.txt matches pyproject.toml
+        run: |
+          uv pip compile pyproject.toml -o /tmp/requirements.check.txt --quiet
+          diff -u requirements.txt /tmp/requirements.check.txt || {
+            echo "::error::requirements.txt is out of date — run: uv pip compile pyproject.toml -o requirements.txt"
+            exit 1
+          }
+
       - name: Lint (ruff check)
         run: uv run ruff check .
 
