@@ -34,7 +34,14 @@ from app.providers.errors import (
     ProviderForbidden,
     ReauthenticationRequired,
 )
-from app.schemas.provider_documents import DocumentDiscoveryResponse, ProviderDocumentOut
+from app.schemas.provider_documents import (
+    ContentsEntryOut,
+    DocumentContentsResponse,
+    DocumentDiscoveryResponse,
+    DocumentSearchHitOut,
+    DocumentSearchResultsResponse,
+    ProviderDocumentOut,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,4 +224,75 @@ async def download_document(
             "X-Document-Origin": document.origin,
             "X-Document-Age-Seconds": str(int(document.age_seconds)),
         },
+    )
+
+
+def _resolve_or_404(settings, token: str, provider_id: str) -> str:
+    """Shared token resolution for the read-only document endpoints."""
+    try:
+        return resolve_document_token(settings, token, provider_id)
+    except MissingTokenSecret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document tokens are not configured for this environment.",
+        ) from None
+    except InvalidDocumentToken:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found.") from None
+
+
+@router.get("/{token}/contents", response_model=DocumentContentsResponse)
+async def document_contents(
+    registry: RegistryDep,
+    settings: SettingsDep,
+    fetcher: DocumentFetcherDep,
+    provider_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"),
+    token: str = Path(pattern=_TOKEN_PATTERN),
+) -> DocumentContentsResponse:
+    """Page count, whether the document can be searched, and its embedded
+    contents with page numbers so a client can jump to a heading."""
+    connector = _connector_or_404(registry, provider_id)
+    source_path = _resolve_or_404(settings, token, provider_id)
+    try:
+        index = await fetcher.index(connector, provider_id, source_path)
+    except ProviderError as exc:
+        _raise_for_provider_error(exc, provider_id)
+    return DocumentContentsResponse(
+        page_count=index.page_count,
+        searchable=index.is_searchable,
+        searchable_pages=index.searchable_pages,
+        contents=[
+            ContentsEntryOut(title=e.title, page_number=e.page_number, depth=e.depth)
+            for e in index.contents
+        ],
+    )
+
+
+@router.get("/{token}/search", response_model=DocumentSearchResultsResponse)
+async def search_within_document(
+    registry: RegistryDep,
+    settings: SettingsDep,
+    fetcher: DocumentFetcherDep,
+    provider_id: str = Path(pattern=r"^[a-z0-9_-]{1,32}$"),
+    token: str = Path(pattern=_TOKEN_PATTERN),
+    q: str = Query(min_length=1, max_length=100, description="Text to find in the document"),
+) -> DocumentSearchResultsResponse:
+    """Find text inside one document, returning page-cited snippets.
+
+    Reports `searchable=false` for documents with no usable text layer so
+    an empty result is never mistaken for "no matches".
+    """
+    from app.documents.pdf_index import search_index
+
+    connector = _connector_or_404(registry, provider_id)
+    source_path = _resolve_or_404(settings, token, provider_id)
+    try:
+        index = await fetcher.index(connector, provider_id, source_path)
+    except ProviderError as exc:
+        _raise_for_provider_error(exc, provider_id)
+    hits = search_index(index, q) if index.is_searchable else []
+    return DocumentSearchResultsResponse(
+        query=q,
+        searchable=index.is_searchable,
+        total_hits=len(hits),
+        hits=[DocumentSearchHitOut(page_number=h.page_number, snippet=h.snippet) for h in hits],
     )

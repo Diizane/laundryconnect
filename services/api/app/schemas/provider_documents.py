@@ -35,3 +35,33 @@ class ProviderDocumentOut(BaseModel):
 class DocumentDiscoveryResponse(BaseModel):
     provider_id: str
     documents: list[ProviderDocumentOut]
+
+
+class ContentsEntryOut(BaseModel):
+    """One heading from the document's embedded contents."""
+
+    title: str
+    page_number: int
+    depth: int = 0
+
+
+class DocumentContentsResponse(BaseModel):
+    page_count: int
+    # False when the PDF carries no usable text layer (a scan, or fonts
+    # without character maps) — the client should say so rather than
+    # offering a search that can only ever return nothing.
+    searchable: bool
+    searchable_pages: int
+    contents: list[ContentsEntryOut] = Field(default_factory=list)
+
+
+class DocumentSearchHitOut(BaseModel):
+    page_number: int
+    snippet: str
+
+
+class DocumentSearchResultsResponse(BaseModel):
+    query: str
+    searchable: bool
+    total_hits: int
+    hits: list[DocumentSearchHitOut] = Field(default_factory=list)

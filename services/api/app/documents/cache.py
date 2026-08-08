@@ -72,6 +72,23 @@ class DocumentCache:
         shard = self._root / key[:2]
         return shard / f"{key}.bin", shard / f"{key}.json"
 
+    def _index_path(self, key: str) -> Path:
+        return self._root / key[:2] / f"{key}.index.json"
+
+    def get_index(self, key: str) -> dict | None:
+        """The derived search/contents index for a cached document, if it
+        has been built. Derived data: a miss simply means rebuild."""
+        try:
+            return json.loads(self._index_path(key).read_text())
+        except (OSError, ValueError):
+            return None
+
+    def put_index(self, key: str, index: dict) -> None:
+        path = self._index_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(index))
+        os.chmod(path, 0o600)
+
     def get(self, key: str) -> CachedDocument | None:
         body_path, meta_path = self._paths(key)
         try:
@@ -145,7 +162,8 @@ class DocumentCache:
                 break
             size = path.stat().st_size
             meta = path.with_suffix(".json")
-            for target in (path, meta):
+            index = path.parent / f"{path.stem}.index.json"
+            for target in (path, meta, index):
                 with contextlib.suppress(OSError):
                     target.unlink()
             total -= size
