@@ -60,6 +60,8 @@ class ResultCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
+                        if (result.isGenerationMatch)
+                          const MatchBadge('matches this serial'),
                         DataOriginBadge(result.dataOrigin),
                         InfoBadge(result.providerId),
                         if (result.documentType != null)

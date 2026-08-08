@@ -48,6 +48,12 @@ class SearchResult {
   final Map<String, String> metadata;
   final double relevanceScore;
 
+  /// True when the backend identified this as the manual generation
+  /// covering the exact machine a serial resolved to. A serial search
+  /// returns every generation for the family; this marks the one whose
+  /// coverage comments fit. Advisory only — the others remain openable.
+  bool get isGenerationMatch => metadata['generation_match'] == 'exact';
+
   /// The reference this result's documents can be discovered with, or null
   /// when the result has none. The value is only ever sent back to the
   /// LaundryConnect backend — never to a provider.
