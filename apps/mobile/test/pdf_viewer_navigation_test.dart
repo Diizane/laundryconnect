@@ -1,12 +1,15 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:laundryconnect/src/api/api_client.dart';
 import 'package:laundryconnect/src/models/provider_documents.dart';
+import 'package:laundryconnect/src/theme/app_theme.dart';
 
 import 'fakes.dart';
 
 /// The viewer's search and contents behaviour, exercised through the API
 /// contract rather than the PDF renderer (which needs a real platform).
 void main() {
+  _searchFieldContrastTests();
   _cachedOriginTests();
   group('document contents model', () {
     test('parses backend contents payload', () {
@@ -150,6 +153,48 @@ void _cachedOriginTests() {
         sampleDownload(origin: 'cached', ageSeconds: 60).ageLabel,
         'just now',
       );
+    });
+  });
+}
+
+void _searchFieldContrastTests() {
+  group('search field readability', () {
+    testWidgets('search field opts out of the app-wide white fill', (
+      tester,
+    ) async {
+      // Field bug: the global inputDecorationTheme fills inputs white,
+      // which made white-on-navy app bar text invisible as it was typed.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            appBar: AppBar(
+              title: TextField(
+                key: const Key('pdf-search-field'),
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Search in this document',
+                  border: InputBorder.none,
+                  filled: false,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final field = tester.widget<TextField>(
+        find.byKey(const Key('pdf-search-field')),
+      );
+      // Unfilled, so the navy app bar shows through behind white text.
+      expect(field.decoration!.filled, isFalse);
+      expect(field.style!.color, Colors.white);
+    });
+
+    test('the app-wide theme does fill inputs white (why the bug existed)', () {
+      final theme = buildAppTheme();
+      expect(theme.inputDecorationTheme.filled, isTrue);
+      expect(theme.inputDecorationTheme.fillColor, Colors.white);
     });
   });
 }
