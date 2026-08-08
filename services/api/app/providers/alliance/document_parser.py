@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from bs4 import BeautifulSoup
 
 from app.providers.alliance.drawing_callouts import DrawingCallout, extract_geometry
+from app.providers.alliance.svg_style import inline_stylesheet
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,10 @@ def parse_drawing_page(body: bytes) -> DrawingContent:
     svg = extract_diagram(text)
     if not svg:
         logger.warning("alliance drawing page: no diagram found")
+    else:
+        # The app's renderer ignores CSS, so a class-styled drawing would
+        # arrive as a black silhouette. See svg_style.
+        svg = inline_stylesheet(svg)
 
     soup = BeautifulSoup(body, "html.parser")
     parts: list[DrawingPart] = []

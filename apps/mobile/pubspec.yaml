@@ -19,6 +19,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # flutter_svg's own compiler, used in tests to assert what the renderer
+  # actually does with a drawing rather than assuming. See
+  # test/svg_stylesheet_test.dart.
+  vector_graphics_compiler: ^1.1.0
 
 flutter:
   uses-material-design: true

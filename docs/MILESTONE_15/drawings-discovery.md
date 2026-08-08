@@ -106,6 +106,37 @@ Geometry separates the two populations cleanly: diagrams hold 22–6,526
 drawing elements, icons never more than 2. That is the rule now used, with
 ambiguity (two candidates) yielding no diagram rather than a guess.
 
+## Styling: CSS classes versus inline attributes
+
+Field report, 2026-08-08: with drawings rendering at last, Water Inlet
+System and Rear Panel came out **solid black** while Frame was correct.
+
+The two pipelines style differently. Frame writes inline
+`style="fill:#fff;stroke:#000"` on each shape. The other writes a `<style>`
+block and a class per shape:
+
+```html
+<style type="text/css">.x1342269031_st7{fill:#FFFFFF;stroke:#000000;}</style>
+<path class="x1342269031_st7" d="…"/>
+```
+
+flutter_svg's compiler lists `<style/>` among its **unhandled elements**
+(verified directly: `apps/mobile/test/svg_stylesheet_test.dart` parses both
+forms and asserts the class-styled one resolves to black). The rules are
+dropped and every shape falls back to a black fill.
+
+So the backend inlines the stylesheet onto the elements before serving it
+(`services/api/app/providers/alliance/svg_style.py`). Measured across the
+34 drawings: 15 are class-styled, and after inlining **no element that a
+rule applies to is left relying on CSS**. The `<style>` block and the
+`class` attributes are kept, so a renderer that does understand CSS sees
+what it saw before.
+
+The uncompressed diagram roughly doubles (1.9 MB → 4.0 MB on Cabinet 2 of
+3) because the declarations repeat per element. On the wire it costs
+almost nothing — Caddy's gzip takes that example from 277 KB to 303 KB,
+about 9% — since the repetition compresses.
+
 ## Recommended scope
 
 **Phase 1 — render drawings at all (high value, no risk).** The app
