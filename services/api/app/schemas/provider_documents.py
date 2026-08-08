@@ -65,3 +65,35 @@ class DocumentSearchResultsResponse(BaseModel):
     searchable: bool
     total_hits: int
     hits: list[DocumentSearchHitOut] = Field(default_factory=list)
+
+
+class DrawingSummaryOut(BaseModel):
+    """One assembly drawing offered for a machine."""
+
+    token: str
+    title: str
+    drawing_id: str | None = None
+
+
+class DrawingListResponse(BaseModel):
+    provider_id: str
+    drawings: list[DrawingSummaryOut] = Field(default_factory=list)
+
+
+class DrawingPartOut(BaseModel):
+    reference: str
+    part_number: str
+    description: str
+    comments: str | None = None
+
+
+class DrawingResponse(BaseModel):
+    """A drawing's diagram and its parts list.
+
+    `svg` is the vector diagram, safe to render directly. Callout numbers
+    inside it are vector outlines, not text, so they are NOT mapped to
+    parts — see docs/MILESTONE_15/drawings-discovery.md.
+    """
+
+    svg: str
+    parts: list[DrawingPartOut] = Field(default_factory=list)

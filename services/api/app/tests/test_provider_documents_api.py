@@ -326,3 +326,48 @@ class TestInDocumentSearchAndContents:
             raw = client.get(path, params=params).text
             for marker in PROVIDER_INTERNALS:
                 assert marker not in raw, f"provider internal '{marker}' leaked"
+
+
+class TestDrawings:
+    """Assembly drawings (Milestone 15 Phase 1): the diagram and its parts
+    list, with no callout-to-part mapping — see the discovery doc."""
+
+    def test_alliance_fixture_lists_drawings(self, alliance_client: TestClient) -> None:
+        body = alliance_client.get(
+            "/api/v1/providers/alliance/drawings", params={"ref": "1001:2002"}
+        ).json()
+        assert body["provider_id"] == "alliance"
+        assert isinstance(body["drawings"], list)
+        raw = json.dumps(body)
+        for marker in PROVIDER_INTERNALS:
+            assert marker not in raw, f"provider internal '{marker}' leaked"
+
+    def test_invalid_reference_is_400(self, alliance_client: TestClient) -> None:
+        response = alliance_client.get(
+            "/api/v1/providers/alliance/drawings", params={"ref": "not-valid"}
+        )
+        assert response.status_code == 400
+
+    def test_provider_without_drawings_is_400(self, client: TestClient) -> None:
+        # The mock provider has no drawing capability.
+        response = client.get("/api/v1/providers/mock/drawings", params={"ref": "SC60"})
+        assert response.status_code == 400
+
+    def test_unknown_provider_is_404(self, client: TestClient) -> None:
+        response = client.get("/api/v1/providers/nope/drawings", params={"ref": "SC60"})
+        assert response.status_code == 404
+
+    def test_malformed_drawing_token_is_404(self, alliance_client: TestClient) -> None:
+        assert alliance_client.get("/api/v1/providers/alliance/drawings/garbage").status_code == 404
+
+    def test_a_document_token_cannot_fetch_a_drawing(self, alliance_client: TestClient) -> None:
+        # Tokens are provider-bound but not endpoint-bound, so a PDF path
+        # reaching the drawing route must fail the path-shape check.
+        token = next(
+            d["token"]
+            for d in _discover(alliance_client, provider="alliance", ref="1001:2002")["documents"]
+            if d["token"]
+        )
+        assert (
+            alliance_client.get(f"/api/v1/providers/alliance/drawings/{token}").status_code == 404
+        )

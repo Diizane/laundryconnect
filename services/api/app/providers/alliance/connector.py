@@ -23,7 +23,13 @@ from app.providers.alliance.config import (
     require_live_allowed,
     resolve_mode,
 )
-from app.providers.alliance.document_parser import parse_literature_page, parse_manual_page
+from app.providers.alliance.document_parser import (
+    DrawingContent,
+    DrawingLink,
+    parse_drawing_page,
+    parse_literature_page,
+    parse_manual_page,
+)
 from app.providers.alliance.generation import best_generation_index
 from app.providers.alliance.session import load_session
 from app.providers.alliance.transport import AllianceTransport, FixtureTransport
@@ -52,6 +58,8 @@ _DOCUMENT_REF = re.compile(r"^(\d{1,12}):(\d{1,12})$")
 _DOCUMENT_PATH = re.compile(
     r"^/manuals/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9 ._-]*\.pdf$"
 )
+# Drawings are served from the manual route with catalog identifiers only.
+_DRAWING_PATH = re.compile(r"^/en/Manual/Drawing\?[A-Za-z0-9=&]{1,200}$")
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -213,6 +221,36 @@ class AllianceConnector(ProviderConnector):
             )
             for record in records
         ]
+
+    async def discover_drawings(self, reference: str) -> list[DrawingLink]:
+        """Assembly drawings offered for a machine (Milestone 15).
+
+        Same bounded traversal and strict reference validation as document
+        discovery: one manual page, no crawling. Drawing names often carry
+        the same model-coverage prose as manual generations, so the ones
+        that apply to a resolved machine are marked — advisory only, never
+        filtered.
+        """
+        match = _DOCUMENT_REF.match(reference or "")
+        if match is None:
+            raise InvalidDocumentReference(
+                "document reference must be '<manual id>:<model id>' (digits only)"
+            )
+        manual_id, model_id = match.groups()
+        transport = self._document_transport()
+        page = parse_manual_page(
+            await transport.fetch_page(
+                self._resolve_path(f"/en/Manual?ManualId={manual_id}&ModelId={model_id}")
+            )
+        )
+        return page.drawings
+
+    async def fetch_drawing(self, source_path: str) -> DrawingContent:
+        """One assembly drawing: its SVG diagram and parts table."""
+        if _DRAWING_PATH.match(source_path or "") is None:
+            raise DocumentNotFound("no drawing at this location")
+        transport = self._document_transport()
+        return parse_drawing_page(await transport.fetch_page(self._resolve_path(source_path)))
 
     async def fetch_document(
         self, source_path: str, *, conditional: dict[str, str] | None = None
