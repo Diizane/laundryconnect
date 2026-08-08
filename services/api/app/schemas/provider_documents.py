@@ -87,13 +87,33 @@ class DrawingPartOut(BaseModel):
     comments: str | None = None
 
 
-class DrawingResponse(BaseModel):
-    """A drawing's diagram and its parts list.
+class DrawingCalloutOut(BaseModel):
+    """A numbered marker on the diagram, in the diagram's own coordinates.
 
-    `svg` is the vector diagram, safe to render directly. Callout numbers
-    inside it are vector outlines, not text, so they are NOT mapped to
-    parts — see docs/MILESTONE_15/drawings-discovery.md.
+    `reference` matches a `DrawingPartOut.reference`. A part marked in two
+    places yields two callouts, and both are tappable.
+    """
+
+    reference: str
+    x: float
+    y: float
+    radius: float
+
+
+class DrawingResponse(BaseModel):
+    """A drawing's diagram, its parts list, and the markers joining them.
+
+    `svg` is the vector diagram, safe to render directly. `view_box` is the
+    coordinate space the callouts are expressed in — `[min_x, min_y, width,
+    height]` — and is null when the diagram declares none, in which case
+    `callouts` is empty because a tap could not be mapped to it.
+
+    Only callouts whose number and position are both certain, and which
+    match a row in `parts`, are listed; see
+    docs/MILESTONE_15/drawings-discovery.md.
     """
 
     svg: str
+    view_box: list[float] | None = None
+    callouts: list[DrawingCalloutOut] = Field(default_factory=list)
     parts: list[DrawingPartOut] = Field(default_factory=list)

@@ -59,6 +59,48 @@ void main() {
       expect(drawing.parts.single.partNumber, 'SP533157');
     });
 
+    test('parses callouts and their coordinate space', () {
+      final drawing = DrawingDetail.fromJson(const {
+        'svg': '<svg viewBox="0 0 557.49 699.41"></svg>',
+        'view_box': [0, 0, 557.49, 699.41],
+        'callouts': [
+          {'reference': '8', 'x': 68.58, 'y': 583.38, 'radius': 9.41},
+        ],
+        'parts': [
+          {'reference': '8', 'part_number': 'SP533157', 'description': 'Belt'},
+        ],
+      });
+      expect(drawing.isInteractive, isTrue);
+      expect(drawing.callouts.single.x, closeTo(68.58, 0.001));
+      expect(drawing.partFor('8')?.partNumber, 'SP533157');
+      expect(drawing.partFor('99'), isNull);
+    });
+
+    test('a drawing whose export does not label callouts is not interactive', () {
+      // One of the provider's export pipelines draws callouts anonymously.
+      // Those drawings stay viewable and searchable, just not tappable.
+      final drawing = DrawingDetail.fromJson(const {
+        'svg': '<svg viewBox="0 0 100 100"></svg>',
+        'view_box': [0, 0, 100, 100],
+        'callouts': <Map<String, dynamic>>[],
+        'parts': [
+          {'reference': '8', 'part_number': 'SP533157', 'description': 'Belt'},
+        ],
+      });
+      expect(drawing.hasDiagram, isTrue);
+      expect(drawing.isInteractive, isFalse);
+    });
+
+    test('callouts without a coordinate space are not interactive', () {
+      final drawing = DrawingDetail.fromJson(const {
+        'svg': '<svg></svg>',
+        'callouts': [
+          {'reference': '8', 'x': 1.0, 'y': 2.0, 'radius': 3.0},
+        ],
+      });
+      expect(drawing.isInteractive, isFalse);
+    });
+
     test('a drawing without a diagram is reported, not crashed on', () {
       final drawing = DrawingDetail.fromJson(const {'svg': '', 'parts': []});
       expect(drawing.hasDiagram, isFalse);
@@ -198,6 +240,74 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Belt'), findsOneWidget);
+    });
+
+    testWidgets('tapping a callout names its part', (tester) async {
+      await tester.pumpWidget(_drawing(FakeProviderDocumentsApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Callout 8'));
+      await tester.pumpAndSettle();
+
+      // The part number is what a technician orders, so it is the headline.
+      expect(find.text('SP533157'), findsWidgets);
+      expect(find.text('Belt'), findsWidgets);
+    });
+
+    testWidgets('a tap target sits over each labelled callout', (tester) async {
+      await tester.pumpWidget(_drawing(FakeProviderDocumentsApi()));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Callout 7'), findsOneWidget);
+      expect(find.bySemanticsLabel('Callout 8'), findsOneWidget);
+    });
+
+    testWidgets('an unlabelled export offers no tap targets and says nothing '
+        'about tapping', (tester) async {
+      final api = FakeProviderDocumentsApi(
+        drawingHandler: (_, _) async => sampleDrawing(callouts: const []),
+      );
+      await tester.pumpWidget(_drawing(api));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Callout 8'), findsNothing);
+      expect(find.textContaining('Tap a number'), findsNothing);
+      // Still fully usable: the diagram and the searchable list remain.
+      expect(find.text('Belt'), findsOneWidget);
+    });
+
+    testWidgets('a callout with no matching part does not open a sheet', (
+      tester,
+    ) async {
+      // The backend drops these, but a client that trusted them would show
+      // an empty sheet instead of an answer.
+      final api = FakeProviderDocumentsApi(
+        drawingHandler: (_, _) async => sampleDrawing(
+          callouts: const [
+            DrawingCallout(reference: '99', x: 20, y: 20, radius: 9),
+          ],
+        ),
+      );
+      await tester.pumpWidget(_drawing(api));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Callout 99'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+    });
+
+    testWidgets('tapping a part row marks it selected', (tester) async {
+      await tester.pumpWidget(_drawing(FakeProviderDocumentsApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Belt'));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<ListTile>(
+        find.ancestor(of: find.text('Belt'), matching: find.byType(ListTile)),
+      );
+      expect(tile.selected, isTrue);
     });
   });
 }

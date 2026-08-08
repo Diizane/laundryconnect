@@ -40,6 +40,7 @@ from app.schemas.provider_documents import (
     DocumentDiscoveryResponse,
     DocumentSearchHitOut,
     DocumentSearchResultsResponse,
+    DrawingCalloutOut,
     DrawingListResponse,
     DrawingPartOut,
     DrawingResponse,
@@ -365,6 +366,11 @@ async def get_drawing(
         _raise_for_provider_error(exc, provider_id)
     return DrawingResponse(
         svg=drawing.svg,
+        view_box=list(drawing.view_box) if drawing.view_box else None,
+        callouts=[
+            DrawingCalloutOut(reference=c.reference, x=c.x, y=c.y, radius=c.radius)
+            for c in drawing.callouts
+        ],
         parts=[
             DrawingPartOut(
                 reference=p.reference,

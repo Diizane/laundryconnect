@@ -19,6 +19,8 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from bs4 import BeautifulSoup
 
+from app.providers.alliance.drawing_callouts import DrawingCallout, extract_geometry
+
 logger = logging.getLogger(__name__)
 
 _LITERATURE_PREFIX = "/en/Model/Literature"
@@ -218,10 +220,13 @@ class DrawingPart:
 
 @dataclass
 class DrawingContent:
-    """A rendered assembly drawing: the diagram plus its parts list."""
+    """A rendered assembly drawing: the diagram, its parts list, and the
+    callout markers that tie the two together."""
 
     svg: str
     parts: list[DrawingPart] = field(default_factory=list)
+    callouts: list[DrawingCallout] = field(default_factory=list)
+    view_box: tuple[float, float, float, float] | None = None
 
     @property
     def has_diagram(self) -> bool:
@@ -296,10 +301,10 @@ def parse_drawing_page(body: bytes) -> DrawingContent:
     """Extract the diagram and its parts table from a drawing page.
 
     The diagram is vector (SVG), which is why it can be shown and zoomed on
-    a phone. Callout numbers inside it are drawn as outlines rather than
-    text, so they are NOT interpreted here — see
-    docs/MILESTONE_15/drawings-discovery.md. Tolerant: a missing diagram or
-    table yields empty values rather than an error.
+    a phone. Its callout markers carry their own reference numbers in the
+    markup, so they are extracted too and the app can turn a tap into a
+    part — see docs/MILESTONE_15/drawings-discovery.md. Tolerant: a missing
+    diagram or table yields empty values rather than an error.
     """
     text = body.decode("utf-8", "ignore")
     svg = extract_diagram(text)
@@ -326,4 +331,14 @@ def parse_drawing_page(body: bytes) -> DrawingContent:
                 comments=(cells[3].get_text(strip=True) or None) if len(cells) > 3 else None,
             )
         )
-    return DrawingContent(svg=svg, parts=parts)
+    geometry = extract_geometry(svg)
+    references = {part.reference for part in parts}
+    # A marker whose number has no row in the parts table cannot tell a
+    # technician anything, and would be a tap target that answers wrongly.
+    callouts = [callout for callout in geometry.callouts if callout.reference in references]
+    if len(callouts) != len(geometry.callouts):
+        logger.warning(
+            "alliance drawing: callouts without a parts row were dropped",
+            extra={"dropped": len(geometry.callouts) - len(callouts)},
+        )
+    return DrawingContent(svg=svg, parts=parts, callouts=callouts, view_box=geometry.view_box)
