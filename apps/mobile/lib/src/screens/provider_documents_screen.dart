@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
@@ -11,7 +9,11 @@ import 'pdf_viewer_screen.dart';
 /// Called when a document has been downloaded and should be shown. Default
 /// pushes the in-app PDF viewer; tests inject a fake.
 typedef PdfOpener =
-    Future<void> Function(BuildContext context, String title, Uint8List bytes);
+    Future<void> Function(
+      BuildContext context,
+      String title,
+      DownloadedDocument document,
+    );
 
 /// Set just before opening so the viewer can offer search and contents for
 /// the document being shown; null when those are unavailable.
@@ -22,13 +24,13 @@ String? _viewerToken;
 Future<void> _openInAppViewer(
   BuildContext context,
   String title,
-  Uint8List bytes,
+  DownloadedDocument document,
 ) {
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => PdfViewerScreen(
         title: title,
-        bytes: bytes,
+        document: document,
         api: _viewerApi,
         providerId: _viewerProviderId,
         token: _viewerToken,
@@ -126,9 +128,9 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
     // viewer needs whichever succeeded.
     var usedToken = token;
     try {
-      Uint8List bytes;
+      DownloadedDocument document_;
       try {
-        bytes = await widget.api.downloadDocument(
+        document_ = await widget.api.downloadDocument(
           widget.result.providerId,
           token,
         );
@@ -145,7 +147,7 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
           );
         }
         usedToken = fresh;
-        bytes = await widget.api.downloadDocument(
+        document_ = await widget.api.downloadDocument(
           widget.result.providerId,
           fresh,
         );
@@ -154,7 +156,7 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
       _viewerApi = widget.api;
       _viewerProviderId = widget.result.providerId;
       _viewerToken = usedToken;
-      await widget.openPdf(context, document.title, bytes);
+      await widget.openPdf(context, document.title, document_);
     } on ApiException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
     } finally {

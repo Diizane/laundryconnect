@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -17,14 +15,14 @@ class PdfViewerScreen extends StatefulWidget {
   const PdfViewerScreen({
     super.key,
     required this.title,
-    required this.bytes,
+    required this.document,
     this.api,
     this.providerId,
     this.token,
   });
 
   final String title;
-  final Uint8List bytes;
+  final DownloadedDocument document;
 
   /// Supplied when the document came from a provider, enabling search and
   /// contents. Omitted for documents opened without a backend reference.
@@ -53,7 +51,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   void initState() {
     super.initState();
     _controller = PdfControllerPinch(
-      document: PdfDocument.openData(widget.bytes),
+      document: PdfDocument.openData(widget.document.bytes),
     );
     if (widget.supportsNavigation) _loadContents();
   }
@@ -163,6 +161,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       body: Column(
         children: [
           if (_searching) const LinearProgressIndicator(minHeight: 2),
+          if (widget.document.isStale)
+            _Notice(
+              icon: Icons.history,
+              // The provider could not be reached, so this is a stored
+              // copy. Say so plainly — a technician deserves to know a
+              // manual might have been revised since.
+              message:
+                  'Showing a saved copy (${widget.document.ageLabel}) — the '
+                  'provider could not be reached to check for a newer '
+                  'version.',
+            ),
           if (widget.supportsNavigation &&
               _contents != null &&
               !_contents!.searchable)

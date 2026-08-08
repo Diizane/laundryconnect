@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:laundryconnect/src/api/api_client.dart';
@@ -29,7 +27,7 @@ Widget _screen(
     api: api,
     openPdf:
         openPdf ??
-        (BuildContext context, String title, Uint8List bytes) async {},
+        (BuildContext context, String title, DownloadedDocument doc) async {},
   ),
 );
 
@@ -389,8 +387,8 @@ void main() {
       await tester.pumpWidget(
         _screen(
           api,
-          openPdf: (_, title, bytes) async {
-            opened.add('$title:${bytes.length}');
+          openPdf: (_, title, doc) async {
+            opened.add('$title:${doc.bytes.length}');
           },
         ),
       );
@@ -416,11 +414,11 @@ void main() {
         if (token == 'token-technical') {
           throw const ApiException('Not found.', kind: ApiErrorKind.notFound);
         }
-        return samplePdfBytes;
+        return sampleDownload();
       };
       final opened = <String>[];
       await tester.pumpWidget(
-        _screen(api, openPdf: (_, title, bytes) async => opened.add(title)),
+        _screen(api, openPdf: (_, title, _) async => opened.add(title)),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Technical Mnl'));

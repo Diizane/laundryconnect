@@ -6,6 +6,8 @@
 /// short backend-configured lifetime; rediscovery mints fresh ones.
 library;
 
+import 'dart:typed_data';
+
 /// One document a provider offers for a machine, with client-safe metadata.
 class ProviderDocument {
   const ProviderDocument({
@@ -229,4 +231,44 @@ class DocumentSearchResults {
                 .toList() ??
             const [],
       );
+}
+
+/// A downloaded document plus where the bytes actually came from.
+///
+/// The backend serves a stored copy when the provider cannot be reached —
+/// an expired session or an outage — which is what keeps a technician
+/// working mid-job. That must be visible rather than silent, consistent
+/// with the project's rule that non-live data is never presented as live.
+class DownloadedDocument {
+  const DownloadedDocument({
+    required this.bytes,
+    required this.origin,
+    this.ageSeconds = 0,
+  });
+
+  final Uint8List bytes;
+
+  /// 'live' when fetched from the provider just now, 'cached' when served
+  /// from the server's stored copy.
+  final String origin;
+
+  /// How long since that copy was last confirmed current. Zero for live
+  /// documents and for cached copies the provider has just revalidated.
+  final int ageSeconds;
+
+  bool get isCached => origin == 'cached';
+
+  /// True only when the copy is genuinely stale — served without the
+  /// provider confirming it. A revalidated copy reports zero age and needs
+  /// no warning.
+  bool get isStale => isCached && ageSeconds > 0;
+
+  /// Short human phrasing of the age, for a badge.
+  String get ageLabel {
+    final days = ageSeconds ~/ 86400;
+    if (days >= 1) return days == 1 ? '1 day old' : '$days days old';
+    final hours = ageSeconds ~/ 3600;
+    if (hours >= 1) return hours == 1 ? '1 hour old' : '$hours hours old';
+    return 'just now';
+  }
 }
