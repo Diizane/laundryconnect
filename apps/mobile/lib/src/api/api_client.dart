@@ -99,6 +99,17 @@ abstract interface class ProviderDocumentsApi {
   /// Downloads one PDF's bytes via the backend proxy. Nothing is persisted
   /// by this client; callers hold the bytes in memory only.
   Future<Uint8List> downloadDocument(String providerId, String token);
+
+  /// Page count, whether the document can be searched, and its embedded
+  /// contents with page numbers (Milestone 13).
+  Future<DocumentContents> documentContents(String providerId, String token);
+
+  /// Find text inside one document; hits cite the page they appear on.
+  Future<DocumentSearchResults> searchWithinDocument(
+    String providerId,
+    String token,
+    String query,
+  );
 }
 
 /// Shared request plumbing: timeouts, connectivity errors, status handling,
@@ -340,6 +351,40 @@ class HttpProviderDocumentsApi implements ProviderDocumentsApi {
         expectedContentType: 'application/pdf',
         timeout: _downloadTimeout,
       );
+
+  @override
+  Future<DocumentContents> documentContents(
+    String providerId,
+    String token,
+  ) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/providers/$providerId/documents/$token/contents',
+    );
+    try {
+      return DocumentContents.fromJson(json as Map<String, dynamic>);
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
+
+  @override
+  Future<DocumentSearchResults> searchWithinDocument(
+    String providerId,
+    String token,
+    String query,
+  ) async {
+    final json = await _backend.requestJson(
+      'GET',
+      '/api/v1/providers/$providerId/documents/$token/search',
+      queryParameters: {'q': query},
+    );
+    try {
+      return DocumentSearchResults.fromJson(json as Map<String, dynamic>);
+    } on TypeError {
+      throw const ApiException('Unexpected server response.');
+    }
+  }
 }
 
 class HttpMachinesApi implements MachinesApi {

@@ -138,6 +138,21 @@ class FakeDocumentsApi implements DocumentsApi {
   }
 }
 
+DocumentContents sampleContents({
+  bool searchable = true,
+  List<ContentsEntry>? contents,
+}) => DocumentContents(
+  pageCount: 82,
+  searchable: searchable,
+  searchablePages: searchable ? 81 : 0,
+  contents:
+      contents ??
+      const [
+        ContentsEntry(title: 'Cover', pageNumber: 1),
+        ContentsEntry(title: 'Drum Drive', pageNumber: 47, depth: 1),
+      ],
+);
+
 final samplePdfBytes = Uint8List.fromList('%PDF-1.4 fake'.codeUnits);
 
 DocumentDiscovery sampleDiscovery({String tokenSuffix = ''}) =>
@@ -172,14 +187,29 @@ DocumentDiscovery sampleDiscovery({String tokenSuffix = ''}) =>
     );
 
 class FakeProviderDocumentsApi implements ProviderDocumentsApi {
-  FakeProviderDocumentsApi({this.discoverHandler, this.downloadHandler});
+  FakeProviderDocumentsApi({
+    this.discoverHandler,
+    this.downloadHandler,
+    this.contentsHandler,
+    this.searchHandler,
+  });
 
   Future<DocumentDiscovery> Function(String providerId, String ref)?
   discoverHandler;
   Future<Uint8List> Function(String providerId, String token)? downloadHandler;
+  Future<DocumentContents> Function(String providerId, String token)?
+  contentsHandler;
+  Future<DocumentSearchResults> Function(
+    String providerId,
+    String token,
+    String query,
+  )?
+  searchHandler;
 
   final discoverCalls = <String>[];
   final downloadCalls = <String>[];
+  final contentsCalls = <String>[];
+  final searchCalls = <String>[];
 
   @override
   Future<DocumentDiscovery> discoverDocuments(String providerId, String ref) {
@@ -195,6 +225,37 @@ class FakeProviderDocumentsApi implements ProviderDocumentsApi {
     final handler = downloadHandler;
     if (handler != null) return handler(providerId, token);
     return Future.value(samplePdfBytes);
+  }
+
+  @override
+  Future<DocumentContents> documentContents(String providerId, String token) {
+    contentsCalls.add(token);
+    final handler = contentsHandler;
+    if (handler != null) return handler(providerId, token);
+    return Future.value(sampleContents());
+  }
+
+  @override
+  Future<DocumentSearchResults> searchWithinDocument(
+    String providerId,
+    String token,
+    String query,
+  ) {
+    searchCalls.add(query);
+    final handler = searchHandler;
+    if (handler != null) return handler(providerId, token, query);
+    return Future.value(
+      DocumentSearchResults(
+        query: query,
+        searchable: true,
+        hits: const [
+          DocumentSearchHit(
+            pageNumber: 47,
+            snippet: '…SMIT Drum Drive - DR20 Models REF PART NO…',
+          ),
+        ],
+      ),
+    );
   }
 }
 

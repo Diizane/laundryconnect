@@ -13,6 +13,12 @@ import 'pdf_viewer_screen.dart';
 typedef PdfOpener =
     Future<void> Function(BuildContext context, String title, Uint8List bytes);
 
+/// Set just before opening so the viewer can offer search and contents for
+/// the document being shown; null when those are unavailable.
+ProviderDocumentsApi? _viewerApi;
+String? _viewerProviderId;
+String? _viewerToken;
+
 Future<void> _openInAppViewer(
   BuildContext context,
   String title,
@@ -20,7 +26,13 @@ Future<void> _openInAppViewer(
 ) {
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => PdfViewerScreen(title: title, bytes: bytes),
+      builder: (_) => PdfViewerScreen(
+        title: title,
+        bytes: bytes,
+        api: _viewerApi,
+        providerId: _viewerProviderId,
+        token: _viewerToken,
+      ),
     ),
   );
 }
@@ -110,6 +122,9 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
     if (token == null || _downloading != null) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _downloading = document.title);
+    // The token actually used may be a fresh one after rediscovery; the
+    // viewer needs whichever succeeded.
+    var usedToken = token;
     try {
       Uint8List bytes;
       try {
@@ -129,12 +144,16 @@ class _ProviderDocumentsScreenState extends State<ProviderDocumentsScreen> {
             kind: ApiErrorKind.notFound,
           );
         }
+        usedToken = fresh;
         bytes = await widget.api.downloadDocument(
           widget.result.providerId,
           fresh,
         );
       }
       if (!mounted) return;
+      _viewerApi = widget.api;
+      _viewerProviderId = widget.result.providerId;
+      _viewerToken = usedToken;
       await widget.openPdf(context, document.title, bytes);
     } on ApiException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
